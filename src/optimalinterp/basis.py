@@ -1,9 +1,14 @@
 from abc import ABC, abstractmethod
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
+from jaxtyping import Float, Array
 from typing import Tuple, Dict, Type
 
 __all__ = ['SplineBasis']
+
+EvalPointsT = Float[Array, "time"]
+BasisEvalT = Float[Array, "time alpha"]
+BasisTensT = Float[Array, '*size']
 
 
 class LinearBasis(ABC):
@@ -13,41 +18,34 @@ class LinearBasis(ABC):
         pass
 
     @abstractmethod
-    def evaluate_basis(self, points: jnp.ndarray) -> jnp.ndarray:
+    def evaluate_basis(self, points: EvalPointsT) -> BasisEvalT:
         pass
 
     @abstractmethod
-    def evaluate_basis_diff(self, points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def evaluate_basis_diff(self, points: EvalPointsT) -> Tuple[BasisEvalT, BasisEvalT]:
         pass
 
     @abstractmethod
-    def evaluate_basis_diff2(self, points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def evaluate_basis_diff2(self, points: EvalPointsT) -> Tuple[BasisEvalT, BasisEvalT, BasisEvalT]:
         pass
 
 
 class Spline(ABC):
     @abstractmethod
-    def evaluate(self, points: jnp.ndarray) -> jnp.ndarray:
+    def evaluate(self, points: BasisTensT) -> BasisTensT:
         pass
 
     @abstractmethod
-    def evaluate_diff(self, points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def evaluate_diff(self, points: BasisTensT) -> Tuple[BasisTensT, BasisTensT]:
         pass
 
     @abstractmethod
-    def evaluate_diff2(self, points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def evaluate_diff2(self, points: BasisTensT) -> Tuple[BasisTensT, BasisTensT, BasisTensT]:
         pass
-
-    def tree_flatten(self):
-        return (None, None)
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        return cls()
 
 
 @jax.jit
-def _eval_sinc_spline_diff2(points: jnp.ndarray):
+def _eval_sinc_spline_diff2(points: BasisTensT):
     eval = jnp.sinc(points)
     cosx = jnp.cos(jnp.pi * points)
     diff = (cosx - eval) / points
@@ -99,7 +97,7 @@ SPLINES: Dict[str, Type] = {
 
 
 @jax.jit
-def _global_to_local(N_knots: int, knots: jnp.ndarray, points: jnp.ndarray):
+def _global_to_local(N_knots: int, knots: Float[Array, ' knots'], points: Float[Array, ' time']):
     return points[:, jnp.newaxis]*(N_knots-1) - knots
 
 

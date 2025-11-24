@@ -4,11 +4,11 @@ from jaxtyping import Array, Float
 from typing import Tuple
 from .moment_generator import PhiTens, MomentGeneratingPhi
 
-PsiT = Float[Array, "N_terms"]
-PsiODET = Float[Array, "2*N_terms"]  # concat: [Ψ(t); \dot{Ψ}(t)]
-Fourier1Tens = Float[Array, "N_terms"]
-Fourier2Tens = Float[Array, "N_terms N_terms"]
-Fourier3Tens = Float[Array, "N_terms N_terms N_terms"]
+PsiT = Float[Array, "alpha"]
+PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
+Fourier1Tens = Float[Array, "alpha"]
+Fourier2Tens = Float[Array, "alpha beta"]
+Fourier3Tens = Float[Array, "alpha beta gamma"]
 
 __all__ = [
     'OptimalInterpBVP_RHS',

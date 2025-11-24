@@ -4,7 +4,7 @@ from jaxtyping import Array, Float
 from typing import Tuple
 __all__ = ['MomentGeneratingPhi']
 
-PhiTens = Float[Array, 'N_terms N_terms']
+PhiTens = Float[Array, 'alpha beta']
 
 
 class MomentGeneratingPhi(ABC):
