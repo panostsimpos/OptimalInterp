@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-import jax
 import jax.numpy as jnp
+import jax
 from typing import Tuple, Dict, Type
 
 __all__ = ['SplineBasis']
@@ -13,30 +13,48 @@ class LinearBasis(ABC):
         pass
 
     @abstractmethod
-    def evaluate_basis(self, points: jax.Array) -> jax.Array:
+    def evaluate_basis(self, points: jnp.ndarray) -> jnp.ndarray:
         pass
 
     @abstractmethod
-    def evaluate_basis_diff(self, points: jax.Array) -> Tuple[jax.Array, jax.Array]:
+    def evaluate_basis_diff(self, points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         pass
 
     @abstractmethod
-    def evaluate_basis_diff2(self, points: jax.Array) -> Tuple[jax.Array, jax.Array, jax.Array]:
+    def evaluate_basis_diff2(self, points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         pass
 
 
 class Spline(ABC):
     @abstractmethod
-    def evaluate(self, points: jax.Array) -> jax.Array:
+    def evaluate(self, points: jnp.ndarray) -> jnp.ndarray:
         pass
 
     @abstractmethod
-    def evaluate_diff(self, points: jax.Array) -> Tuple[jax.Array, jax.Array]:
+    def evaluate_diff(self, points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         pass
 
     @abstractmethod
-    def evaluate_diff2(self, points: jax.Array) -> Tuple[jax.Array, jax.Array, jax.Array]:
+    def evaluate_diff2(self, points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         pass
+
+    def tree_flatten(self):
+        return (None, None)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        return cls()
+
+
+@jax.jit
+def _eval_sinc_spline_diff2(points: jnp.ndarray):
+    eval = jnp.sinc(points)
+    cosx = jnp.cos(jnp.pi * points)
+    diff = (cosx - eval) / points
+    diff = jnp.where(points == 0., 0., diff)
+    diff2 = -(2 * diff / points + jnp.pi*jnp.pi*eval)
+    diff2 = jnp.where(points == 0., -jnp.pi * jnp.pi / 3, diff2)
+    return eval, diff, diff2
 
 
 class SincSpline(Spline):
@@ -54,13 +72,7 @@ class SincSpline(Spline):
         return eval, diff
 
     def evaluate_diff2(self, points):
-        eval = self.evaluate(points)
-        cosx = jnp.cos(jnp.pi * points)
-        diff = (cosx - eval) / points
-        diff = jnp.where(points == 0., 0., diff)
-        diff2 = -(2 * diff / points + jnp.pi*jnp.pi*eval)
-        diff2 = jnp.where(points == 0., -jnp.pi * jnp.pi / 3, diff2)
-        return eval, diff, diff2
+        return _eval_sinc_spline_diff2(points)
 
 
 class HatSpline(Spline):
@@ -86,9 +98,14 @@ SPLINES: Dict[str, Type] = {
 }
 
 
+@jax.jit
+def _global_to_local(N_knots: int, knots: jnp.ndarray, points: jnp.ndarray):
+    return points[:, jnp.newaxis]*(N_knots-1) - knots
+
+
 class SplineBasis(LinearBasis):
     N_knots: int
-    knots: jax.Array
+    knots: jnp.ndarray
     spline: Spline
 
     def __init__(self, N_knots, spline: Spline | str):
@@ -114,20 +131,17 @@ class SplineBasis(LinearBasis):
     def N_shap(self):
         return self.N_knots
 
-    def global_to_local(self, points: jax.Array) -> jax.Array:
-        return points[:, jnp.newaxis]*(self.N_knots-1) - self.knots
-
     def evaluate_basis(self, points):
         "returns eval.shape = (N_points, N_knots)"
-        return self.spline.evaluate(self.global_to_local(points))
+        return self.spline.evaluate(_global_to_local(self.N_knots, self.knots, points))
 
     def evaluate_basis_diff(self, points):
-        local_points = self.global_to_local(points)
+        local_points = _global_to_local(self.N_knots, self.knots, points)
         evals, diff = self.spline.evaluate_diff(local_points)
         return evals, diff*(self.N_knots - 1)
 
     def evaluate_basis_diff2(self, points):
         scale = self.N_knots - 1
-        local_points = self.global_to_local(points)
+        local_points = _global_to_local(self.N_knots, self.knots, points)
         evals, diff, diff2 = self.spline.evaluate_diff2(local_points)
         return evals, diff*scale, diff2*(scale**2)

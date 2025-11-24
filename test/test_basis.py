@@ -45,6 +45,8 @@ def test_sinc_diff():
         np.array(diff2_fd), rel=10*FD_DELTA
     )
 
+# TODO: Test hat spline
+
 
 def test_spline_basis_init():
     N_knots = 11
