@@ -114,18 +114,20 @@ class SplineBasis(LinearBasis):
     def N_shap(self):
         return self.N_knots
 
+    def global_to_local(self, points: jax.Array) -> jax.Array:
+        return points[:, jnp.newaxis]*(self.N_knots-1) - self.knots
+
     def evaluate_basis(self, points):
         "returns eval.shape = (N_points, N_knots)"
-        local_points = points[:, jnp.newaxis]*(self.N_knots-1) - self.knots
-        return self.spline.evaluate(local_points)
+        return self.spline.evaluate(self.global_to_local(points))
 
     def evaluate_basis_diff(self, points):
-        local_points = points*(self.N_knots-1) - self.knots[:, jnp.newaxis]
+        local_points = self.global_to_local(points)
         evals, diff = self.spline.evaluate_diff(local_points)
         return evals, diff*(self.N_knots - 1)
 
     def evaluate_basis_diff2(self, points):
         scale = self.N_knots - 1
-        local_points = points*scale - self.knots[:, jnp.newaxis]
+        local_points = self.global_to_local(points)
         evals, diff, diff2 = self.spline.evaluate_diff2(local_points)
         return evals, diff*scale, diff2*(scale**2)
