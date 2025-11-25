@@ -1,17 +1,17 @@
 from abc import ABC, abstractmethod
 import jax.numpy as jnp
-from jaxtyping import Array, Float, Complex
+from jaxtyping import Array, Float
 from typing import Tuple
 import numpy as np  # Provisionally, until Panos becomes comfortable with jax
 
 __all__ = ["MomentGeneratingPhi", "GaussianPhi1D"]
 
-PhiTens = Complex[Array, "alpha beta"]
+PhiTens = Float[Array, "N_terms N_terms"]
 
 
 class MomentGeneratingPhi(ABC):
     @abstractmethod
-    def evaluate(self, psi_t: Array) -> Tuple[PhiTens, PhiTens, PhiTens]:
+    def evaluate(self, psi_t: jnp.ndarray) -> Tuple[PhiTens, PhiTens, PhiTens]:
         """
         Returns Phi, Phi', and Phi''.
         Each returned tensor P has indexing P[alpha, beta] = P_alpha(-beta psi_t[alpha])
@@ -48,18 +48,14 @@ class GaussianPhi1D(MomentGeneratingPhi):
 
         alpha_s = np.arange(N + 1)
         beta_s = np.arange(N + 1)  # Now we do as many DOFs as modes
-        eff_mu_s = mu * alpha_s / N
-        eff_sigma_s = (1.0 - alpha_s / N) ** 2 + \
-            (alpha_s * sigma / N)**2
+        eff_mu_s = mu / N * alpha_s
+        eff_sigma_s = (1.0 - alpha_s / N) ** 2 + alpha_s**2 / (N**2) * sigma**2
         arg_s = -beta_s[None, :] * psi_t[:, None]
         # Compute Phi, Phi', Phi'' using broadcasting
         Phi_s = np.exp(
-            1j * eff_mu_s[:, None] * arg_s -
-            0.5 * arg_s**2 * eff_sigma_s[:, None]
+            1j * eff_mu_s[:, None] * arg_s - 1 / 2 * arg_s**2 * eff_sigma_s[:, None]
         )
-        Phi_prime_s = Phi_s * (
-            1j * eff_mu_s[:, None] - eff_sigma_s[:, None] * arg_s
-        )
+        Phi_prime_s = Phi_s * (1j * eff_mu_s[:, None] - eff_sigma_s[:, None] * arg_s)
         Phi_double_prime_s = Phi_s * (
             (1j * eff_mu_s[:, None] - eff_sigma_s[:, None] * arg_s) ** 2
             - eff_sigma_s[:, None]
