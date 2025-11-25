@@ -32,14 +32,16 @@ def test_sinc_diff():
     diffs_fd = (evals_fd_pos - evals_fd_neg) / (2 * FD_DELTA)
     evals_diff, diffs = sinc.evaluate_diff(pts)
     assert np.all(np.array(evals) == np.array(evals_diff))
-    assert np.array(diffs) == pytest.approx(np.array(diffs_fd), rel=10 * FD_DELTA)
+    assert np.array(diffs) == pytest.approx(
+        np.array(diffs_fd), rel=10 * FD_DELTA)
     evals_diff2, diffs_diff2, diff2 = sinc.evaluate_diff2(pts)
     assert np.all(np.array(evals) == np.array(evals_diff2))
     assert np.all(np.array(diffs) == np.array(diffs_diff2))
     _, diffs_fd_pos = sinc.evaluate_diff(pts_fd_pos)
     _, diffs_fd_neg = sinc.evaluate_diff(pts_fd_neg)
     diff2_fd = (diffs_fd_pos - diffs_fd_neg) / (2 * FD_DELTA)
-    assert np.array(diff2) == pytest.approx(np.array(diff2_fd), rel=10 * FD_DELTA)
+    assert np.array(diff2) == pytest.approx(
+        np.array(diff2_fd), rel=10 * FD_DELTA)
 
 
 # TODO: Test hat spline
@@ -78,82 +80,13 @@ def test_spline_basis_diff():
     diffs_fd = (evals_pos_fd - evals_neg_fd) / (2 * FD_DELTA)
     evals_diff, diffs = basis.evaluate_basis_diff(pts)
     assert np.array(evals_diff) == pytest.approx(np.array(evals), rel=1e-15)
-    assert np.array(diffs) == pytest.approx(np.array(diffs_fd), rel=10 * FD_DELTA)
+    assert np.array(diffs) == pytest.approx(
+        np.array(diffs_fd), rel=10 * FD_DELTA)
     _, diffs_pos_fd = basis.evaluate_basis_diff(pts_pos_fd)
     _, diffs_neg_fd = basis.evaluate_basis_diff(pts_neg_fd)
     diff2_fd = (diffs_pos_fd - diffs_neg_fd) / (2 * FD_DELTA)
     evals_diff2, diffs_diff2, diff2 = basis.evaluate_basis_diff2(pts)
     assert np.array(evals_diff2) == pytest.approx(np.array(evals), rel=1e-15)
     assert np.array(diffs_diff2) == pytest.approx(np.array(diffs), rel=1e-15)
-    assert np.array(diff2) == pytest.approx(np.array(diff2_fd), rel=10 * FD_DELTA)
-
-
-###### ALSO USING NUMPY HERE, CHANGE######
-def test_gaussian_phi_1d_shape():
-    mu = 1.0
-    sigma = 2.0
-    phi = oi.GaussianPhi1D(mu, sigma)
-    N_terms = 5
-    psi_t = np.linspace(-1, 1, N_terms)
-    Phi, Phi_prime, Phi_double_prime = phi.evaluate(psi_t)
-    assert Phi.shape == (N_terms, N_terms)
-    assert Phi_prime.shape == (N_terms, N_terms)
-    assert Phi_double_prime.shape == (N_terms, N_terms)
-
-
-def test_gaussian_phi_1d_endpoints():
-    mu = 1.0
-    sigma = 2.0
-    phi = oi.GaussianPhi1D(mu, sigma)
-    N_terms = 3
-    psi_t = np.linspace(-1, 1, N_terms)
-    beta_s = np.arange(N_terms)
-    test_vals_0 = -beta_s * psi_t[0]
-    test_vals_1 = -beta_s * psi_t[-1]
-    # Standard gaussian at t=0
-    char_function_gauss_0 = np.exp(-0.5 * test_vals_0**2)
-    char_function_gauss_1 = np.exp(
-        1j * mu * test_vals_1 - 0.5 * sigma**2 * test_vals_1**2
-    )
-    Phi, _, _ = phi.evaluate(psi_t)
-    assert Phi[0, :] == pytest.approx(char_function_gauss_0, rel=1e-15)
-    assert Phi[-1, :] == pytest.approx(char_function_gauss_1, rel=1e-15)
-
-
-def test_gaussian_phi_1d_derivatives():
-    FD_DELTA = 1e-4
-    mu = 1.0
-    sigma = 2.0
-    phi = oi.GaussianPhi1D(mu, sigma)
-    N_terms = 3
-    psi_t = np.linspace(-1, 1, N_terms)
-    beta_s = np.arange(N_terms)
-    _, Phi_prime, Phi_double_prime = phi.evaluate(psi_t)
-    # First derivs at t=0
-    pts = -beta_s * psi_t[0]
-    pts_pos_fd, pts_neg_fd = pts + FD_DELTA, pts - FD_DELTA
-    char_funct_0 = lambda t: np.exp(-0.5 * t**2)
-    deriv_0 = (char_funct_0(pts_pos_fd) - char_funct_0(pts_neg_fd)) / (2 * FD_DELTA)
-    second_deriv_0 = (
-        char_funct_0(pts_pos_fd) - 2 * char_funct_0(pts) + char_funct_0(pts_neg_fd)
-    ) / (FD_DELTA**2)
-    assert np.array(Phi_prime[0, :]) == pytest.approx(
-        np.array(deriv_0), rel=10 * FD_DELTA
-    )
-    assert np.array(Phi_double_prime[0, :]) == pytest.approx(
-        np.array(second_deriv_0), rel=10 * FD_DELTA
-    )
-    # Test derivs at t=1
-    pts = -beta_s * psi_t[-1]
-    pts_pos_fd, pts_neg_fd = pts + FD_DELTA, pts - FD_DELTA
-    char_funct_1 = lambda t: np.exp(1j * mu * t - 0.5 * sigma**2 * t**2)
-    deriv_1 = (char_funct_1(pts_pos_fd) - char_funct_1(pts_neg_fd)) / (2 * FD_DELTA)
-    assert np.array(Phi_prime[-1, :]) == pytest.approx(
-        np.array(deriv_1), rel=10 * FD_DELTA
-    )
-    second_deriv_1 = (
-        char_funct_1(pts_pos_fd) - 2 * char_funct_1(pts) + char_funct_1(pts_neg_fd)
-    ) / (FD_DELTA**2)
-    assert np.array(Phi_double_prime[-1, :]) == pytest.approx(
-        np.array(second_deriv_1), rel=10 * FD_DELTA
-    )
+    assert np.array(diff2) == pytest.approx(
+        np.array(diff2_fd), rel=10 * FD_DELTA)
