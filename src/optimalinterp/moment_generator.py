@@ -6,7 +6,7 @@ import numpy as np  # Provisionally, until Panos becomes comfortable with jax
 
 __all__ = ["MomentGeneratingPhi", "GaussianPhi1D"]
 
-PhiTens = Complex[Array, "N_terms N_terms"]
+PhiTens = Complex[Array, "alpha beta"]
 
 
 class MomentGeneratingPhi(ABC):
