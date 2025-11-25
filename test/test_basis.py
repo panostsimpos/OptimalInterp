@@ -121,6 +121,7 @@ def test_gaussian_phi_1d_endpoints():
 
 
 def test_gaussian_phi_1d_derivatives():
+    FD_DELTA = 1e-4
     mu = 1.0
     sigma = 2.0
     phi = oi.GaussianPhi1D(mu, sigma)
@@ -128,25 +129,31 @@ def test_gaussian_phi_1d_derivatives():
     psi_t = np.linspace(-1, 1, N_terms)
     beta_s = np.arange(N_terms)
     _, Phi_prime, Phi_double_prime = phi.evaluate(psi_t)
-    # Test derivs at t=0
+    # First derivs at t=0
     pts = -beta_s * psi_t[0]
     pts_pos_fd, pts_neg_fd = pts + FD_DELTA, pts - FD_DELTA
     char_funct_0 = lambda t: np.exp(-0.5 * t**2)
-    diffs_0 = (char_funct_0(pts_pos_fd) - char_funct_0(pts_neg_fd)) / (2 * FD_DELTA)
-
+    deriv_0 = (char_funct_0(pts_pos_fd) - char_funct_0(pts_neg_fd)) / (2 * FD_DELTA)
+    second_deriv_0 = (
+        char_funct_0(pts_pos_fd) - 2 * char_funct_0(pts) + char_funct_0(pts_neg_fd)
+    ) / (FD_DELTA**2)
     assert np.array(Phi_prime[0, :]) == pytest.approx(
-        np.array(diffs_0), rel=10 * FD_DELTA
+        np.array(deriv_0), rel=10 * FD_DELTA
     )
-    # Second deriv at t=0
-    # ...
+    assert np.array(Phi_double_prime[0, :]) == pytest.approx(
+        np.array(second_deriv_0), rel=10 * FD_DELTA
+    )
     # Test derivs at t=1
-    # Test derivs at t=0
     pts = -beta_s * psi_t[-1]
     pts_pos_fd, pts_neg_fd = pts + FD_DELTA, pts - FD_DELTA
     char_funct_1 = lambda t: np.exp(1j * mu * t - 0.5 * sigma**2 * t**2)
-    diffs_1 = (char_funct_1(pts_pos_fd) - char_funct_1(pts_neg_fd)) / (2 * FD_DELTA)
-
+    deriv_1 = (char_funct_1(pts_pos_fd) - char_funct_1(pts_neg_fd)) / (2 * FD_DELTA)
     assert np.array(Phi_prime[-1, :]) == pytest.approx(
-        np.array(diffs_1), rel=10 * FD_DELTA
+        np.array(deriv_1), rel=10 * FD_DELTA
     )
-    # FINISH THIS TEST
+    second_deriv_1 = (
+        char_funct_1(pts_pos_fd) - 2 * char_funct_1(pts) + char_funct_1(pts_neg_fd)
+    ) / (FD_DELTA**2)
+    assert np.array(Phi_double_prime[-1, :]) == pytest.approx(
+        np.array(second_deriv_1), rel=10 * FD_DELTA
+    )
