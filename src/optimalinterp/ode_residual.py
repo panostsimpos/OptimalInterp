@@ -2,10 +2,9 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 from typing import Tuple
-from .moment_generator import PhiTens, MomentGeneratingPhi
+from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
 import numpy as np  # Provisionally, until Panos becomes comfortable with jax
 
-PsiT = Float[Array, "alpha"]
 PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
 Fourier1Tens = Float[Array, "alpha"]
 Fourier2Tens = Float[Array, "alpha beta"]
@@ -36,21 +35,21 @@ def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
     Returns:
         D: (N_terms, N_terms) array
     """
-    return -1j * Phi_prime / Phi * np.prod(Phi, axis=0)[None, :]
+    return -1j * Phi_prime / Phi * Phi.prod(axis=0)[None, :]
 
 
 def calculate_C(
     Phi: PhiTens, Phi_prime: PhiTens, Phi_prime_prime: PhiTens, D_tens: Fourier2Tens
 ) -> Fourier3Tens:
-    eye = np.eye(D_tens.shape[0])
-    ones = np.ones(D_tens.shape)
+    eye = jnp.eye(D_tens.shape[0])
+    ones = jnp.ones(D_tens.shape)
 
     # DO NOT FORGET -i*beta factor!
     C = (
         -eye[:, None, :]
         * Phi_prime_prime[:, :, None]
         / Phi[:, :, None]
-        * np.prod(Phi, axis=0)[None, :, None]
+        * Phi.prod(axis=0)[None, :, None]
     )
     # Use that 1/(-1j) = j and j*j = -1
     C = C - (ones - eye[:, None, :]) * D_tens[:, :, None] * D_tens[None, :, :]
