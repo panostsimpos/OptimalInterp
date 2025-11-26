@@ -18,23 +18,28 @@ def test_gaussian_phi_1d_shape():
     assert Phi_double_prime.shape == (N_terms, N_terms)
 
 
-def test_gaussian_phi_1d_endpoints():
+def test_gaussian_phi_1d_eval():
     mu = 1.0
     sigma = 2.0
     phi = oi.GaussianPhi1D(mu, sigma)
-    N_terms = 3
+    N_terms = 5
     psi_t = np.linspace(-1, 1, N_terms)
-    beta_s = np.arange(N_terms + 1)
-    test_vals_0 = -beta_s * psi_t[0]
-    test_vals_1 = -beta_s * psi_t[-1]
+    # beta_s = np.arange(N_terms + 1)
+    # test_vals_0 = -beta_s * psi_t[0]
+    # test_vals_1 = -beta_s * psi_t[-1]
     # Standard Gaussian at t=0
-    char_function_gauss_0 = np.exp(-0.5 * test_vals_0**2)
-    char_function_gauss_1 = np.exp(
-        1j * mu * test_vals_1 - 0.5 * sigma**2 * test_vals_1**2
-    )
+    # char_function_gauss_0 = np.exp(-0.5 * test_vals_0**2)
+    char_function_gauss = np.zeros((N_terms, N_terms), dtype=np.complex128)
+    for beta in range(N_terms):
+        for alpha in range(N_terms):
+            t = -beta * psi_t[alpha]
+            ratio = alpha / (N_terms-1)
+            mean_term = 1j * mu * ratio * t
+            noise_term = 0j + 0.5 * t * t * ((1-ratio)**2 + (ratio*sigma)**2)
+            log_phi = mean_term - noise_term
+            char_function_gauss[alpha, beta] = np.exp(log_phi)
     Phi, _, _ = phi.evaluate(psi_t)
-    assert Phi[0, :] == pytest.approx(char_function_gauss_0, rel=1e-15)
-    assert Phi[-1, :] == pytest.approx(char_function_gauss_1, rel=1e-15)
+    assert Phi == pytest.approx(char_function_gauss, rel=1e-15)
 
 
 # def test_old_gaussian_phi_1d_derivatives():
