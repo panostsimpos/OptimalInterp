@@ -39,7 +39,7 @@ class GaussianPhi1D(MomentGeneratingPhi):
 
     def evaluate(self, psi_t):
         # --------------------------------------------
-        # Convention: suffice _s to indicate arrays
+        # Convention: suffix _s to indicate arrays
         # --------------------------------------------
         mu = self.mu
         sigma = self.sigma

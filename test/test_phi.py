@@ -98,7 +98,6 @@ def test_gaussian_phi_1d_derivatives():
     phi_pos_fd, phi_prime_pos_fd, _ = phi.evaluate(pts_pos_fd)
     phi_neg_fd, phi_prime_neg_fd, _ = phi.evaluate(pts_neg_fd)
     beta_s = np.arange(N_terms)
-    beta_s_reg = np.where(beta_s != 0, beta_s, FD_DELTA)
     deriv = (phi_pos_fd - phi_neg_fd) / (2 * FD_DELTA)
     second_deriv = (phi_prime_pos_fd - phi_prime_neg_fd) / (2 * FD_DELTA)
     print("Finite difference approx")
@@ -110,6 +109,6 @@ def test_gaussian_phi_1d_derivatives():
     assert np.array(Phi_prime * (-beta_s[None, :])) == pytest.approx(
         np.array(deriv), rel=10 * FD_DELTA
     )
-    assert np.array(Phi_double_prime) == pytest.approx(
+    assert np.array(Phi_double_prime * (-beta_s[None, :]) ** 2) == pytest.approx(
         np.array(second_deriv), rel=10 * np.sqrt(FD_DELTA)
     )
