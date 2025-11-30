@@ -15,18 +15,19 @@ __all__ = [
     "OptimalInterpBVP_RHS",
     "OptimalInterpBVP_mass_matrix",
     "OptimalInterpPDE_residual",
+    "Calculate_K",
+    "Calculate_D",
+    "Calculate_C",
 ]
 
 
-def calculate_K(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier1Tens:
+def calculate_K(Phi: PhiTens) -> Fourier1Tens:
     """
     Calculate convolution kernel K_t = IFFT(1/FFT(L_t)), where L_t = Prod_alpha Phi_alpha(-beta psi_t[alpha])
     --------------------------------------------------------------
     Inputs:
         Phi: (N_terms, N_terms) array
             Moment generating function evaluations
-        Phi_prime: (N_terms, N_terms) array
-            First derivatives of moment generating function evaluations
     Returns:
         K_t: (N_terms,) array
             Convolution kernel
