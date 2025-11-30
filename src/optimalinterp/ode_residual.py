@@ -1,3 +1,4 @@
+from math import gamma
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
@@ -18,7 +19,24 @@ __all__ = [
 
 
 def calculate_K(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier1Tens:
-    pass
+    """
+    Calculate convolution kernel K_t = IFFT(1/FFT(L_t)), where L_t = Prod_alpha Phi_alpha(-beta psi_t[alpha])
+    --------------------------------------------------------------
+    Inputs:
+        Phi: (N_terms, N_terms) array
+            Moment generating function evaluations
+        Phi_prime: (N_terms, N_terms) array
+            First derivatives of moment generating function evaluations
+    Returns:
+        K_t: (N_terms,) array
+            Convolution kernel
+    --------------------------------------------------------------
+    """
+    L_t = Phi.prod(axis=0)  # (N_terms,) array
+    # TODO: make sure complex numbers are handled correctly
+    L_t_hat = jnp.fft.fft(L_t)
+    K_t = jnp.fft.ifft(jnp.reciprocal(L_t_hat))
+    return K_t
 
 
 def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
@@ -39,12 +57,37 @@ def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
 
 
 def calculate_C(
-    Phi: PhiTens, Phi_prime: PhiTens, Phi_prime_prime: PhiTens, D_tens: Fourier2Tens
+    Phi: PhiTens,
+    Phi_prime: PhiTens,
+    Phi_prime_prime: PhiTens,
+    D_tens: Fourier2Tens,
+    K: Fourier1Tens,
 ) -> Fourier3Tens:
+    """
+    Calculate C_{alpha,beta,gamma} tensor needed for PDE residual
+    --------------------------------------------------------------
+    Inputs:
+    -------
+    Phi: (N_terms, N_terms) array
+        Moment generating function evaluations
+    Phi_prime: (N_terms, N_terms) array
+        First derivatives of moment generating function evaluations
+    Phi_prime_prime: (N_terms, N_terms) array
+        Second derivatives of moment generating function evaluations
+    D_tens: (N_terms, N_terms) array
+        D_{alpha,beta} tensor
+    K: (N_terms,) array
+        Convolution kernel
+    Returns:
+    --------
+    C: (N_terms, N_terms, N_terms) array
+        C_{alpha,beta,gamma} tensor
+    --------------------------------------------------------------
+    """
+
     eye = jnp.eye(D_tens.shape[0])
     ones = jnp.ones(D_tens.shape)
 
-    # DO NOT FORGET -i*beta factor!
     C = (
         -eye[:, None, :]
         * Phi_prime_prime[:, :, None]
@@ -53,6 +96,22 @@ def calculate_C(
     )
     # Use that 1/(-1j) = j and j*j = -1
     C = C - (ones - eye[:, None, :]) * D_tens[:, :, None] * D_tens[None, :, :]
+
+    # Add convolutional term
+    def convolve_term(D_alpha, D_gamma):
+        temp = jnp.convolve(K, D_gamma, mode="full")  # Out is length 2*N_terms-1
+        return jnp.convolve(D_alpha, temp, mode="valid")  # Out is length N_terms
+
+    batch_convolve = jax.vmap(
+        jax.vmap(convolve_term, in_axes=(0, None), out_axes=0),
+        in_axes=(None, 0),
+        out_axes=2,  # Get out shape alpha,beta,gamma
+    )
+    C = C - batch_convolve(D_tens, D_tens)
+
+    # DO NOT FORGET -i*beta factor!
+    beta_s = jnp.arange(Phi.shape[0])
+    return -1j * beta_s[None, :, None] * C
 
 
 def OptimalInterpPDEResidualPt(
