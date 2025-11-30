@@ -28,9 +28,9 @@ def test_gaussian_phi_1d_eval():
     for beta in range(N_terms):
         for alpha in range(N_terms):
             t = -beta * psi_t[alpha]
-            ratio = alpha / (N_terms-1)
+            ratio = alpha / (N_terms - 1)
             mean_term = 1j * mu * ratio * t
-            noise_term = 0j + 0.5 * t * t * ((1-ratio)**2 + (ratio*sigma)**2)
+            noise_term = 0j + 0.5 * t * t * ((1 - ratio) ** 2 + (ratio * sigma) ** 2)
             log_phi = mean_term - noise_term
             char_function_gauss[alpha, beta] = np.exp(log_phi)
     Phi, _, _ = phi.evaluate(psi_t)
