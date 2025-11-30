@@ -14,10 +14,7 @@ Fourier3Tens = Float[Array, "alpha beta gamma"]
 __all__ = [
     "OptimalInterpBVP_RHS",
     "OptimalInterpBVP_mass_matrix",
-    "OptimalInterpPDE_residual",
-    "Calculate_K",
-    "Calculate_D",
-    "Calculate_C",
+    "OptimalInterpPDE_residual"
 ]
 
 
@@ -100,8 +97,10 @@ def calculate_C(
 
     # Add convolutional term
     def convolve_term(D_alpha, D_gamma):
-        temp = jnp.convolve(K, D_gamma, mode="full")  # Out is length 2*N_terms-1
-        return jnp.convolve(D_alpha, temp, mode="valid")  # Out is length N_terms
+        # Out is length 2*N_terms-1
+        temp = jnp.convolve(K, D_gamma, mode="full")
+        # Out is length N_terms
+        return jnp.convolve(D_alpha, temp, mode="valid")
 
     batch_convolve = jax.vmap(
         jax.vmap(convolve_term, in_axes=(0, None), out_axes=0),
