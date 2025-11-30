@@ -6,12 +6,10 @@ from .ode_residual import (
     calculate_D,
     calculate_C,
 )
+from .aux_tools import circ_convolution
 
 __all__ = [
     "SplineBasis",
     "LinearSolutionApproximator",
     "GaussianPhi1D",
-    "calculate_K",
-    "calculate_D",
-    "calculate_C",
 ]

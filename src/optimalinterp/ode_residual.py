@@ -14,7 +14,7 @@ Fourier3Tens = Float[Array, "alpha beta gamma"]
 __all__ = [
     "OptimalInterpBVP_RHS",
     "OptimalInterpBVP_mass_matrix",
-    "OptimalInterpPDE_residual"
+    "OptimalInterpPDE_residual",
 ]
 
 
@@ -31,9 +31,8 @@ def calculate_K(Phi: PhiTens) -> Fourier1Tens:
     --------------------------------------------------------------
     """
     L_t = Phi.prod(axis=0)  # (N_terms,) array
-    # TODO: make sure complex numbers are handled correctly
-    L_t_hat = jnp.fft.fft(L_t)
-    K_t = jnp.fft.ifft(jnp.reciprocal(L_t_hat))
+    L_t_hat = jnp.fft.ifft(L_t)
+    K_t = jnp.fft.fft(jnp.reciprocal(L_t_hat))
     return K_t
 
 
@@ -95,6 +94,9 @@ def calculate_C(
     # Use that 1/(-1j) = j and j*j = -1
     C = C - (ones - eye[:, None, :]) * D_tens[:, :, None] * D_tens[None, :, :]
 
+    # ------------------------------
+    # TODO: Fix convolution using circ_convolution from aux_tools.py!!
+    # ------------------------------
     # Add convolutional term
     def convolve_term(D_alpha, D_gamma):
         # Out is length 2*N_terms-1
