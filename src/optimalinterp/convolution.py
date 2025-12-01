@@ -1,10 +1,11 @@
 import jax.numpy as jnp
 import chex
-from enum import Enum
+from enum import IntEnum
 import jax
+from functools import partial
 
 
-class CONVOLUTION_DOMAIN(Enum):
+class CONVOLUTION_DOMAIN(IntEnum):
     TIME = 1
     FREQ = 2
 
@@ -26,6 +27,7 @@ def circ_convolve_freq(X, H):
 
 
 @chex.chexify
+@partial(jax.jit, static_argnames=["domain_type"])
 def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
     """
     Circular convolution of two arrays using FFTs.
@@ -47,8 +49,8 @@ def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
     conv_out: (N,) array
         Circular convolution output
     """
-    tmp = (domain_type.value - CONVOLUTION_DOMAIN.FREQ.value) * \
-          (domain_type.value - CONVOLUTION_DOMAIN.TIME.value)
+    tmp = (domain_type - CONVOLUTION_DOMAIN.FREQ) * \
+          (domain_type - CONVOLUTION_DOMAIN.TIME)
     chex.assert_equal(tmp, 0)
     return jax.lax.cond(
         domain_type == CONVOLUTION_DOMAIN.TIME,
