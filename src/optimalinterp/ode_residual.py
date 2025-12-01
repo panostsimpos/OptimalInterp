@@ -88,10 +88,11 @@ def calculate_C(
         * (Phi_prime_prime[:, :, None] / Phi[:, :, None])
         * phi_prod[None, :, None]
     )
-    # Use that 1/(-1j) = j and j*j = -1
+
     ratio = Phi_prime / Phi
-    C = C + (ones - eye[:, None, :]) * ratio[:, :, None] * \
-        ratio.T[None, :, :] * phi_prod[None, :, None]
+    C = C + (ones - eye[:, None, :]) * (
+        ratio[:, :, None] * ratio.T[None, :, :] * phi_prod[None, :, None]
+    )
 
     # ------------------------------
     # TODO: Fix convolution using circ_convolution from convolution.py!!
