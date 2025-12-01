@@ -4,11 +4,11 @@ import jax.numpy as jnp
 from jaxtyping import Float, Array
 from typing import Tuple, Dict, Type
 
-__all__ = ['SplineBasis']
+__all__ = ["SplineBasis"]
 
 EvalPointsT = Float[Array, "time"]
 BasisEvalT = Float[Array, "time alpha"]
-BasisTensT = Float[Array, '*size']
+BasisTensT = Float[Array, "*size"]
 
 
 class LinearBasis(ABC):
@@ -91,13 +91,13 @@ class HatSpline(Spline):
 
 
 SPLINES: Dict[str, Type] = {
-    'sinc': SincSpline,
-    'hat': HatSpline
+    "sinc": SincSpline,
+    "hat": HatSpline
 }
 
 
 @jax.jit
-def _global_to_local(N_knots: int, knots: Float[Array, ' knots'], points: Float[Array, ' time']):
+def _global_to_local(N_knots: int, knots: Float[Array, " knots"], points: Float[Array, " time"]):
     return points[:, jnp.newaxis]*(N_knots-1) - knots
 
 

@@ -8,5 +8,5 @@ __all__ = [
     "SplineBasis",
     "LinearSolutionApproximator",
     "GaussianPhi1D",
-    'ode_residual'
+    "ode_residual"
 ]
