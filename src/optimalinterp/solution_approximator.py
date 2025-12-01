@@ -6,8 +6,8 @@ from jaxtyping import Float, Array, PyTree
 from .basis import LinearBasis, EvalPointsT
 from typing import Tuple
 
-SolutionT = Float[Array, 'time alpha']
-CoeffsT = Float[Array, 'shap alpha']
+SolutionT = Float[Array, "time alpha"]
+CoeffsT = Float[Array, "shap alpha"]
 SolutionDiffsT = Tuple[SolutionT, SolutionT, SolutionT]
 
 

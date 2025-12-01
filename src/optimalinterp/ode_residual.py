@@ -1,10 +1,8 @@
-from math import gamma
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
-from typing import Tuple
 from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
-import numpy as np  # Provisionally, until Panos becomes comfortable with jax
+from .convolution import batch_convolve
 
 PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
 Fourier1Tens = Float[Array, "alpha"]
@@ -58,7 +56,7 @@ def calculate_C(
     Phi_prime: PhiTens,
     Phi_prime_prime: PhiTens,
     D_tens: Fourier2Tens,
-    K: Fourier1Tens,
+    K_tens: Fourier1Tens,
 ) -> Fourier3Tens:
     """
     Calculate C_{alpha,beta,gamma} tensor needed for PDE residual
@@ -84,32 +82,23 @@ def calculate_C(
 
     eye = jnp.eye(D_tens.shape[0])
     ones = jnp.ones(D_tens.shape)
-
+    phi_prod = Phi.prod(axis=0)
     C = (
         -eye[:, None, :]
-        * Phi_prime_prime[:, :, None]
-        / Phi[:, :, None]
-        * Phi.prod(axis=0)[None, :, None]
+        * (Phi_prime_prime[:, :, None] / Phi[:, :, None])
+        * phi_prod[None, :, None]
     )
-    # Use that 1/(-1j) = j and j*j = -1
-    C = C - (ones - eye[:, None, :]) * D_tens[:, :, None] * D_tens[None, :, :]
+
+    ratio = Phi_prime / Phi
+    C = C + (ones - eye[:, None, :]) * (
+        ratio[:, :, None] * ratio.T[None, :, :] * phi_prod[None, :, None]
+    )
 
     # ------------------------------
-    # TODO: Fix convolution using circ_convolution from aux_tools.py!!
+    # TODO: Fix convolution using circ_convolution from convolution.py!!
     # ------------------------------
     # Add convolutional term
-    def convolve_term(D_alpha, D_gamma):
-        # Out is length 2*N_terms-1
-        temp = jnp.convolve(K, D_gamma, mode="full")
-        # Out is length N_terms
-        return jnp.convolve(D_alpha, temp, mode="valid")
-
-    batch_convolve = jax.vmap(
-        jax.vmap(convolve_term, in_axes=(0, None), out_axes=0),
-        in_axes=(None, 0),
-        out_axes=2,  # Get out shape alpha,beta,gamma
-    )
-    C = C - batch_convolve(D_tens, D_tens)
+    C = C - batch_convolve(D_tens, D_tens, K_tens)
 
     # DO NOT FORGET -i*beta factor!
     beta_s = jnp.arange(Phi.shape[0])
@@ -121,7 +110,8 @@ def OptimalInterpPDEResidualPt(
 ):
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     D_tens = calculate_D(Phi, Phi_prime)
-    C_tens = calculate_C(Phi, Phi_prime, Phi_prime_prime, D_tens)
+    K_tens = calculate_K(Phi)
+    C_tens = calculate_C(Phi, Phi_prime, Phi_prime_prime, D_tens, K_tens)
     # TODO
     pass
 
