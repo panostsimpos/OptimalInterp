@@ -10,11 +10,12 @@ def test_D_K_C_tensor_shape():
     phi = oi.GaussianPhi1D(mu, sigma)
     psi_t = jnp.linspace(-1, 1, N_terms)
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
-    D_tens = oi.calculate_D(Phi, Phi_prime)
+    D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
     assert D_tens.shape == (N_terms, N_terms)
-    K = oi.calculate_K(Phi)
+    K = oi.ode_residual.calculate_K(Phi)
     assert K.shape == (N_terms,)
-    C_tens = oi.calculate_C(Phi, Phi_prime, Phi_prime_prime, D_tens, K)
+    C_tens = oi.ode_residual.calculate_C(
+        Phi, Phi_prime, Phi_prime_prime, D_tens, K)
     assert C_tens.shape == (N_terms, N_terms, N_terms)
 
 
@@ -25,7 +26,7 @@ def test_K_kernel():
     phi = oi.GaussianPhi1D(mu, sigma)
     psi_t = jnp.linspace(-2, 2, N_terms) + 1j * jnp.linspace(-2, 2, N_terms)
     Phi, _, _ = phi.evaluate(psi_t)
-    K_t = oi.calculate_K(Phi)
+    K_t = oi.ode_residual.calculate_K(Phi)
     # ----------------------
     # Check that F^{-1}[L_t] * F^{-1}[K] = 1
     L_t = jnp.ones((N_terms), dtype=complex)
@@ -38,12 +39,14 @@ def test_K_kernel():
     # ----------------------
     # Check real inputs -> real outputs
     zeroes = jnp.zeros((N_terms,), dtype=complex)
-    K_real = oi.calculate_K(Phi.real)
+    K_real = oi.ode_residual.calculate_K(Phi.real)
     assert K_real.imag == pytest.approx(zeroes, abs=1e-15)
     # ----------------------
     # Check convolution identity:
     # L_t \ast K_t = F[F^{-1}[L_t]] \ast F[1/F^{-1}[L_t]] = F[1] = pulse-in-freq-space
-    conv_out = oi.circ_convolution(L_t, K_t, domain_type="freq")
+    conv_out = oi.circ_convolution(
+        L_t, K_t, domain_type=oi.CONVOLUTION_DOMAIN.FREQ
+    )
     long_ones = jnp.ones_like(conv_out)
     print("*************CONV OUT:***************")
     print(jnp.round(conv_out, decimals=5))
@@ -57,7 +60,7 @@ def test_D_tensor():
     phi = oi.GaussianPhi1D(mu, sigma)
     psi_t = jnp.linspace(-2, 2, N_terms)
     Phi, Phi_prime, _ = phi.evaluate(psi_t)
-    D_tens = oi.calculate_D(Phi, Phi_prime)
+    D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
     L_t = jnp.ones((N_terms), dtype=complex)
     for beta in range(N_terms):
         for alpha in range(N_terms):

@@ -10,23 +10,22 @@ class CONVOLUTION_DOMAIN(Enum):
 
 
 @jax.jit
-@chex.chexify
 def circ_convolve_time(x, h):
-    chex.assert_equal_shape(x, h)
+    chex.assert_equal_shape((x, h))
     X = jnp.fft.fft(x)
     H = jnp.fft.fft(h)
     return jnp.fft.ifft(X * H)
 
 
 @jax.jit
-@chex.chexify
 def circ_convolve_freq(X, H):
-    chex.assert_equal_shape(X, H)
+    chex.assert_equal_shape((X, H))
     x = jnp.fft.ifft(X)
     h = jnp.fft.ifft(H)
     return jnp.fft.fft(x * h)
 
 
+@chex.chexify
 def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
     """
     Circular convolution of two arrays using FFTs.
@@ -48,7 +47,9 @@ def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
     conv_out: (N,) array
         Circular convolution output
     """
-    chex.assert_type(domain_type, CONVOLUTION_DOMAIN)
+    tmp = (domain_type.value - CONVOLUTION_DOMAIN.FREQ.value) * \
+          (domain_type.value - CONVOLUTION_DOMAIN.TIME.value)
+    chex.assert_equal(tmp, 0)
     return jax.lax.cond(
         domain_type == CONVOLUTION_DOMAIN.TIME,
         circ_convolve_time,

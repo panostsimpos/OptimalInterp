@@ -1,10 +1,7 @@
-from math import gamma
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
-from typing import Tuple
 from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
-import numpy as np  # Provisionally, until Panos becomes comfortable with jax
 
 PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
 Fourier1Tens = Float[Array, "alpha"]
