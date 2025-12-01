@@ -56,3 +56,18 @@ def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
         circ_convolve_freq,
         arr_1, arr_2
     )
+
+
+@jax.jit
+def convolve_term(D_alpha, D_gamma, K):
+    # Out is length 2*N_terms-1
+    temp = jnp.convolve(K, D_gamma, mode="full")
+    # Out is length N_terms
+    return jnp.convolve(D_alpha, temp, mode="valid")
+
+
+batch_convolve = jax.vmap(
+    jax.vmap(convolve_term, in_axes=(0, None, None), out_axes=0),
+    in_axes=(None, 0, None),
+    out_axes=2,  # Get out shape alpha,beta,gamma
+)
