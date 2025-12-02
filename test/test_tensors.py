@@ -75,4 +75,14 @@ def test_D_tensor():
 
 
 def test_C_tensor():
-    pass
+    N_terms = 5
+    mu = 1.0
+    sigma = 2.0
+    phi = oi.GaussianPhi1D(mu, sigma)
+    psi_t = jnp.linspace(-2, 2, N_terms)
+    Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
+    D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
+    K_tens = oi.ode_residual.calculate_K(Phi)
+    C_tens = oi.ode_residual.calculate_C(
+        Phi, Phi_prime, Phi_prime_prime, D_tens, K_tens)
+    assert False
