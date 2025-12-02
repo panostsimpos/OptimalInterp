@@ -1,1 +1,5 @@
-# TODO Write some tests for aux_tools.py functions
+import test_aux_tools
+
+
+def test_circ_convolution():
+    pass

@@ -49,14 +49,16 @@ def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
     conv_out: (N,) array
         Circular convolution output
     """
-    tmp = (domain_type - CONVOLUTION_DOMAIN.FREQ) * \
-          (domain_type - CONVOLUTION_DOMAIN.TIME)
+    tmp = (domain_type - CONVOLUTION_DOMAIN.FREQ) * (
+        domain_type - CONVOLUTION_DOMAIN.TIME
+    )
     chex.assert_equal(tmp, 0)
     return jax.lax.cond(
         domain_type == CONVOLUTION_DOMAIN.TIME,
         circ_convolve_time,
         circ_convolve_freq,
-        arr_1, arr_2
+        arr_1,
+        arr_2,
     )
 
 
