@@ -45,7 +45,7 @@ def convolve_tensors(
         out_axes=2,  # Get out shape alpha, gamma
     )
     return out_map(Tens1, Kernel, Tens2)
-    # Make sure shapes are correct!!
+    # TODO: Make sure shapes are correct!!
 
 
 def calculate_K(Phi: PhiTens) -> Fourier1Tens:
