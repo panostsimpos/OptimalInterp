@@ -42,8 +42,8 @@ def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
         First input array
     arr_2: (N,) array
         Second input array
-    domain_type: str
-        "time" if inputs are in time domain, "freq" if inputs are in frequency domain
+    domain_type: CONVOLUTION_DOMAIN
+        Domain type of the input arrays (TIME or FREQ)
     Returns:
     --------
     conv_out: (N,) array
@@ -63,15 +63,53 @@ def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
 
 
 @jax.jit
-def convolve_term(D_alpha, D_gamma, K):
-    # Out is length 2*N_terms-1
-    temp = jnp.convolve(K, D_gamma, mode="full")
-    # Out is length N_terms
-    return jnp.convolve(D_alpha, temp, mode="valid")
+def triple_circ_convolve_time(x, h, g):
+    chex.assert_equal_shape((x, h))
+    chex.assert_equal_shape((h, g))
+    X = jnp.fft.fft(x)
+    H = jnp.fft.fft(h)
+    G = jnp.fft.fft(g)
+    return jnp.fft.ifft(X * H * G)
 
 
-batch_convolve = jax.vmap(
-    jax.vmap(convolve_term, in_axes=(0, None, None), out_axes=0),
-    in_axes=(None, 0, None),
-    out_axes=2,  # Get out shape alpha,beta,gamma
-)
+@jax.jit
+def triple_circ_convolve_freq(X, H, G):
+    chex.assert_equal_shape((X, H))
+    chex.assert_equal_shape((H, G))
+    x = jnp.fft.ifft(X)
+    h = jnp.fft.ifft(H)
+    g = jnp.fft.ifft(G)
+    return jnp.fft.fft(x * h * g)
+
+
+# batch_convolve = jax.vmap(
+#     jax.vmap(triple_circ_convolution, in_axes=(0, None, None), out_axes=0),
+#     in_axes=(None, 0, None),
+#     out_axes=2,  # Get out shape alpha,beta,gamma
+# )
+
+
+# @jax.jit
+# def convolve_term(D_alpha, D_gamma, K):
+#     """
+#     Compute the zero padded convolution of two 1d arrays.
+#     -------
+#     Warning : Shoudl NOT be used to compute the C tensor.
+#     -------
+#     Inputs:
+#     -------
+#     D_alpha: (N_terms,) array
+#         First input array
+#     D_gamma: (N_terms,) array
+#         Second input array
+#     K: (N_terms,) array
+#         Convolution kernel
+#     Returns:
+#     --------
+#     conv_out: (N_terms,) array
+#         Convolution output
+#     """
+#     # Out is length 2*N_terms-1
+#     temp = jnp.convolve(K, D_gamma, mode="full")
+#     # Out is length N_terms
+#     return jnp.convolve(D_alpha, temp, mode="valid")

@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
-from .convolution import batch_convolve
+from .convolution import triple_circ_convolve_freq
 
 PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
 Fourier1Tens = Float[Array, "alpha"]
@@ -14,6 +14,38 @@ __all__ = [
     "OptimalInterpBVP_mass_matrix",
     "OptimalInterpPDE_residual",
 ]
+
+
+def convolve_tensors(
+    Tens1: Fourier2Tens,
+    Kernel: Fourier1Tens,
+    Tens2: Fourier2Tens,
+) -> Fourier2Tens:
+    """
+    Compute the convolution of the D tensor and the K kernel.
+    Circular convolution must be used here.
+    --------------------------------------------------------------
+    Inputs:
+    -------
+    Tens1: (N_terms, N_terms) array
+        First input tensor
+    Kernel: (N_terms,) array
+        Convolution kernel
+    Tens2: (N_terms, N_terms) array
+        Second input tensor
+    Returns:
+    --------
+    None: (N_terms, N_terms, N_terms) array
+        Convolution output
+    --------------------------------------------------------------
+    """
+    out_map = jax.vmap(
+        jax.vmap(triple_circ_convolve_freq, in_axes=(1, None, None), out_axes=0),
+        in_axes=(None, None, 1),
+        out_axes=2,  # Get out shape alpha, gamma
+    )
+    return out_map(Tens1, Kernel, Tens2)
+    # Make sure shapes are correct!!
 
 
 def calculate_K(Phi: PhiTens) -> Fourier1Tens:
@@ -94,11 +126,8 @@ def calculate_C(
         ratio[:, :, None] * ratio.T[None, :, :] * phi_prod[None, :, None]
     )
 
-    # ------------------------------
-    # TODO: Fix convolution using circ_convolution from convolution.py!!
-    # ------------------------------
     # Add convolutional term
-    C = C - batch_convolve(D_tens, D_tens, K_tens)
+    C = C - convolve_tensors(D_tens, K_tens, D_tens)
 
     # DO NOT FORGET -i*beta factor!
     beta_s = jnp.arange(Phi.shape[0])
