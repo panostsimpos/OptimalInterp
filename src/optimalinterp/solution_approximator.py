@@ -38,7 +38,6 @@ class LinearSolutionApproximator(SolutionApproximator):
         basis_evals = basis.evaluate_basis_diff2(evaluation_points)
         self.basis_eval, self.basis_diff, self.basis_diff2 = basis_evals
 
-    @chex.chexify
     def evaluate_all(self, params: CoeffsT):
         chex.assert_shape(params, (self.basis.N_shap, self.N_terms))
         return _linear_solution_evaluator(self.basis_eval, self.basis_diff, self.basis_diff2)

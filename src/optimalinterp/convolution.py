@@ -26,7 +26,6 @@ def circ_convolve_freq(X, H):
     return jnp.fft.fft(x * h)
 
 
-@chex.chexify
 @partial(jax.jit, static_argnames=["domain_type"])
 def circ_convolution(arr_1, arr_2, domain_type: CONVOLUTION_DOMAIN):
     """
