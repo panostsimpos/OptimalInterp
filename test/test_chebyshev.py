@@ -2,9 +2,10 @@ import jax
 import jax.numpy as jnp
 import pytest
 from optimalinterp import chebyshev
+import optimalinterp as oi
 jax.config.update("jax_enable_x64", True)
 
-FD_DELTA = 1e-7
+FD_DELTA = 1e-8
 
 def test_chebyshev_eval():
     coeffs = [
@@ -36,3 +37,21 @@ def test_chebyshev_eval():
     assert pts_diff1 == pytest.approx(true_diff1, rel=1e-12, abs=1e-12)
     # Ease tolerance due to number of flops needed for diff2 TTRR eval
     assert pts_diff2 == pytest.approx(true_diff2, rel=1e-11, abs=1e-11)
+
+def test_chebyshev_linear_basis():
+    max_order, N_pts = 5, 101
+    pts_m1p1 = jnp.linspace(-1, 1, N_pts)
+    evals_m1p1, diff1_m1p1, diff2_m1p1 = chebyshev.diff2(pts_m1p1, max_order)
+    diff1_m1p1 *= 2
+    diff2_m1p1 *= 4
+    basis = oi.basis.LinearBasis(max_order, 'chebyshev')
+    pts_01 = jnp.linspace(0, 1, N_pts)
+    evals_01, diff1_01, diff2_01 = basis.evaluate_basis_diff2(pts_01)
+    assert evals_m1p1 == pytest.approx(evals_01, rel=1e-12, abs=1e-12)
+    assert diff1_m1p1 == pytest.approx(diff1_01, rel=1e-12, abs=1e-12)
+    assert diff2_m1p1 == pytest.approx(diff2_01, rel=1e-11, abs=1e-11)
+    evals_fd_01, diff1_fd_01 = basis.evaluate_basis_diff(pts_01 + FD_DELTA)
+    diff1_fd = (evals_fd_01 - evals_01)/FD_DELTA
+    diff2_fd = (diff1_fd_01 - diff1_01)/FD_DELTA
+    assert diff1_01 == pytest.approx(diff1_fd, rel=200*FD_DELTA, abs=jnp.sqrt(FD_DELTA))
+    assert diff2_01 == pytest.approx(diff2_fd, rel=200*FD_DELTA, abs=jnp.sqrt(FD_DELTA))
