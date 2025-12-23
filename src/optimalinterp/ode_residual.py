@@ -176,11 +176,10 @@ def create_spline_residual(psi: SplineBasis, phi: MomentGeneratingPhi):
     return jax.jit(spline_residual)
 
 
-
 def create_collocated_basis_residual(t_grid: Float[Array, " T"], N_terms: int, psi: AbstractLinearBasis, phi: MomentGeneratingPhi):
     """Create a residual using collocation. Assume that the first two elements of the linear basis are fixed to ensure boundary conditions."""
     t_grid = jnp.sort(t_grid)
-    assert t_grid[0] == 0. and t_grid[-1] == 1. # Ensure grid is valid
+    assert t_grid[0] == 0. and t_grid[-1] == 1.  # Ensure grid is valid
     # Evaluate basis
     basis_eval, basis_diff1, basis_diff2 = psi.evaluate_basis_diff2(t_grid)
     # Get the zero and first order basis at times [0, 1]

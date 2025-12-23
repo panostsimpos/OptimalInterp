@@ -172,7 +172,11 @@ class LinearBasis(AbstractLinearBasis):
     lo: float = 0.
     hi: float = 1.
 
-    def __init__(self, max_order: int, eval_or_module: ModuleType | BasisEvalFcn | str, diff1: BasisDiff1Fcn | None = None, diff2: BasisDiff2Fcn | None = None, original_interval: tuple | None = None):
+    def __init__(
+            self, max_order: int, eval_or_module: ModuleType | BasisEvalFcn | str,
+            diff1: BasisDiff1Fcn | None = None, diff2: BasisDiff2Fcn | None = None,
+            original_interval: tuple = (0., 1.)
+    ):
         r"""
         Use a general linear basis for approximation. ASSUMES THAT ANY INPUT IS IN (0,1), I.E., OPTIMAL INTERPOLANT SETUP
         """
@@ -186,7 +190,9 @@ class LinearBasis(AbstractLinearBasis):
             basis_spec = mod.__spec__
             assert basis_spec is not None
             basis_name = basis_spec.name.split('.')[-1]
-            self.lo, self.hi = BASES_INTERVAL.get(basis_name, (0., 1.))
+            self.lo, self.hi = BASES_INTERVAL.get(
+                basis_name, original_interval
+            )
             self.eval = mod.eval
             self.diff1 = mod.diff1
             self.diff2 = mod.diff2
@@ -212,13 +218,14 @@ class LinearBasis(AbstractLinearBasis):
         return self.eval(points*(self.hi - self.lo) + self.lo, self.max_order)
 
     def evaluate_basis_diff(self, points):
-        eval, diff = self.diff1(points*(self.hi - self.lo) + self.lo, self.max_order)
+        pts01 = points*(self.hi - self.lo) + self.lo
+        eval, diff = self.diff1(pts01, self.max_order)
         diff = diff * (self.hi - self.lo)
         return eval, diff
 
     def evaluate_basis_diff2(self, points):
-        eval, diff1, diff2 = self.diff2(points*(self.hi - self.lo) + self.lo, self.max_order)
+        pts01 = points*(self.hi - self.lo) + self.lo
+        eval, diff1, diff2 = self.diff2(pts01, self.max_order)
         diff1 = diff1 * (self.hi - self.lo)
         diff2 = diff2 * ((self.hi - self.lo)**2)
         return eval, diff1, diff2
-
