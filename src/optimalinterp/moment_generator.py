@@ -31,7 +31,9 @@ class GaussianPhi1D(MomentGeneratingPhi):
             mu: Mean of Gaussian at final time.
             sigma: Standard deviation of Gaussian at final time.
         Outputs:
-            (Phi, Phi', Phi''): Each of shape (N_terms, N_terms)
+            (Phi, Phi', Phi''): Each of shape (N_terms, N_terms) with signature
+                Phi[alpha, beta] = \Phi_alpha(-beta psi_t[alpha])
+                and similarly for Phi' and Phi''.
         """
         self.mu = mu
         self.sigma = sigma
@@ -52,11 +54,9 @@ class GaussianPhi1D(MomentGeneratingPhi):
         arg_s = -beta_s[None, :] * psi_t[:, None]
         # Compute Phi, Phi', Phi'' using broadcasting
         Phi_s = jnp.exp(
-            1j * eff_mu_s[:, None] * arg_s - 1 /
-            2 * arg_s**2 * eff_sigma_s[:, None]
+            1j * eff_mu_s[:, None] * arg_s - 1 / 2 * arg_s**2 * eff_sigma_s[:, None]
         )
-        Phi_prime_s = Phi_s * \
-            (1j * eff_mu_s[:, None] - eff_sigma_s[:, None] * arg_s)
+        Phi_prime_s = Phi_s * (1j * eff_mu_s[:, None] - eff_sigma_s[:, None] * arg_s)
         Phi_double_prime_s = Phi_s * (
             (1j * eff_mu_s[:, None] - eff_sigma_s[:, None] * arg_s) ** 2
             - eff_sigma_s[:, None]

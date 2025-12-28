@@ -97,11 +97,12 @@ def calculate_C(
     Inputs:
     -------
     Phi: (N_terms, N_terms) array
-        Moment generating function evaluations
+        Moment generating function evaluations with signature
+        Phi[alpha, beta] = \Phi_alpha(-beta psi_t[alpha])
     Phi_prime: (N_terms, N_terms) array
-        First derivatives of moment generating function evaluations
+        First derivatives of moment generating function evaluations and signature as above.
     Phi_prime_prime: (N_terms, N_terms) array
-        Second derivatives of moment generating function evaluations
+        Second derivatives of moment generating function evaluations and signature as above.
     D_tens: (N_terms, N_terms) array
         D_{alpha,beta} tensor
     K: (N_terms,) array
@@ -116,16 +117,12 @@ def calculate_C(
     phi_prod = Phi.prod(axis=0)
 
     ratio_1 = Phi_prime / Phi
-    C = jnp.einsum(
-        'ab,gb,b->abg', ratio_1, ratio_1, phi_prod
-    )
+    C = jnp.einsum("ab,gb,b->abg", ratio_1, ratio_1, phi_prod)
 
     # Terms where alpha == gamma
     idx = jnp.arange(N_terms)
     ratio_2 = Phi_prime_prime / Phi
-    C = C.at[idx, :, idx].set(
-        - ratio_2 * phi_prod[None, :]
-    )
+    C = C.at[idx, :, idx].set(-ratio_2 * phi_prod[None, :])
 
     # Add convolutional term
     C = C - convolve_tensors(D_tens, K_tens, D_tens)
@@ -145,8 +142,8 @@ def OptimalInterpPDEResidualPt(
     print(D_tens)
     print(K_tens)
     print(C_tens)
-    rhs = jnp.einsum('abg,a,g->b', C_tens, psi_dot_t, psi_dot_t)
-    lhs = jnp.einsum('ab,a->b', D_tens, psi_diff2_t)
+    rhs = jnp.einsum("abg,a,g->b", C_tens, psi_dot_t, psi_dot_t)
+    lhs = jnp.einsum("ab,a->b", D_tens, psi_diff2_t)
     return rhs - lhs
 
 
@@ -155,7 +152,9 @@ def OptimalInterpPDE_residual(phi: MomentGeneratingPhi, *args):
     pass
 
 
-def OptimalInterpBVP_ODE_RHS(concat_psi: PsiODET, phi: MomentGeneratingPhi, D_infl: Float) -> PsiODET:
+def OptimalInterpBVP_ODE_RHS(
+    concat_psi: PsiODET, phi: MomentGeneratingPhi, D_infl: Float
+) -> PsiODET:
     N_terms = concat_psi.shape[0] // 2
     psi_t, psi_dot_t = concat_psi[:N_terms], concat_psi[N_terms:]
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
@@ -163,7 +162,7 @@ def OptimalInterpBVP_ODE_RHS(concat_psi: PsiODET, phi: MomentGeneratingPhi, D_in
     K_tens = calculate_K(Phi)
     C_tens = calculate_C(Phi, Phi_prime, Phi_prime_prime, D_tens, K_tens)
     rhs_d_psi = psi_dot_t
-    d_psi_dot_contract = jnp.einsum('abg,a,g->b', C_tens, psi_dot_t, psi_dot_t)
+    d_psi_dot_contract = jnp.einsum("abg,a,g->b", C_tens, psi_dot_t, psi_dot_t)
     # Note that D is (alpha, beta), so we transpose it before solving
     D_solve = D_tens.T  # + D_infl * jnp.eye(N_terms)
     rhs_d_psi_dot = jnp.linalg.lstsq(D_solve, d_psi_dot_contract)[0]
@@ -178,16 +177,18 @@ def OptimalInterpBVP_DAE_RHS(concat_psi: PsiODET, phi: MomentGeneratingPhi) -> P
     K_tens = calculate_K(Phi)
     C_tens = calculate_C(Phi, Phi_prime, Phi_prime_prime, D_tens, K_tens)
     rhs_d_psi = psi_dot_t
-    rhs_d_psi_dot = jnp.einsum('abg,a,g->b', C_tens, psi_dot_t, psi_dot_t)
+    rhs_d_psi_dot = jnp.einsum("abg,a,g->b", C_tens, psi_dot_t, psi_dot_t)
     return jnp.concat((rhs_d_psi, rhs_d_psi_dot))
 
 
-def OptimalInterpBVP_DAE_LHS(concat_d_psi: PsiODET, concat_psi: PsiODET, phi: MomentGeneratingPhi) -> PsiODET:
+def OptimalInterpBVP_DAE_LHS(
+    concat_d_psi: PsiODET, concat_psi: PsiODET, phi: MomentGeneratingPhi
+) -> PsiODET:
     N_terms = concat_psi.shape[0] // 2
     psi_t = concat_psi[:N_terms]
     d_psi_t, d_psi_dot_t = concat_d_psi[:N_terms], concat_d_psi[N_terms:]
     Phi, Phi_prime, _ = phi.evaluate(psi_t)
     D_tens = calculate_D(Phi, Phi_prime)
     lhs_d_psi = d_psi_t
-    lhs_d_psi_dot = jnp.einsum('ab,a->b', D_tens, d_psi_dot_t)
+    lhs_d_psi_dot = jnp.einsum("ab,a->b", D_tens, d_psi_dot_t)
     return jnp.concat((lhs_d_psi, lhs_d_psi_dot))
