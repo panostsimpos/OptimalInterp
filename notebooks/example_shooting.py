@@ -91,7 +91,10 @@ plt.show()
 def solve(psi_dot_0, *args, **solver_kwargs):
     psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
-    y0 = jnp.concat((psi_0, psi_dot_0, jnp.zeros(N_terms)))
+    y0 = jnp.concat(
+        (psi_0, psi_dot_0, jnp.zeros(N_terms))
+    )  # TODO: Do we not need 2N zeros in the velocity state?
+    # y0 = jnp.concat((psi_0, psi_dot_0, jnp.zeros(N_terms), jnp.zeros(N_terms)))
     sol = diffrax.diffeqsolve(
         term,
         solver,
