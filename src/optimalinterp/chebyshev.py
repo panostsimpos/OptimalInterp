@@ -1,8 +1,8 @@
+from __future__ import annotations
 import jax.numpy as jnp
 import jax
 from jaxtyping import Float, Array
 from functools import partial
-
 
 def scan(prev_vals, _):
     (pt, Tn_minus, Tn) = prev_vals
@@ -76,6 +76,63 @@ def diff2_slice(pt: Float[Array, ""], max_order: int):
     return all_evals, all_diff1, all_diff2
 
 
-eval = jax.vmap(slice, in_axes=(0, None))
-diff1 = jax.vmap(diff_slice, in_axes=(0, None))
-diff2 = jax.vmap(diff2_slice, in_axes=(0, None))
+__eval = jax.vmap(slice, in_axes=(0, None))
+__diff1 = jax.vmap(diff_slice, in_axes=(0, None))
+__diff2 = jax.vmap(diff2_slice, in_axes=(0, None))
+
+def eval(pts: Float[Array, " N"], max_order: int):
+    r"""
+    Evaluate Chebyshev polynomials on a set of points
+    --------------------------------------------------------------
+    Inputs:
+    -------
+    pts: (N,) array
+        Points to evaluate polynomial on
+    max_order: int
+        Order of polynomial to evaluate up to
+    Returns:
+    --------
+    evaluations: (N, max_order + 1) array
+        The basis evaluations from degree 0 through max_order
+    """
+    return __eval(pts, max_order)
+
+def diff1(pts, max_order):
+    r"""
+    Evaluate Chebyshev polynomials and derivatives on a set of points
+    --------------------------------------------------------------
+    Inputs:
+    -------
+    pts: (N,) array
+        Points to evaluate polynomial on
+    max_order: int
+        Order of polynomial to evaluate up to
+    Returns:
+    --------
+    evaluations: (N, max_order + 1) array
+        The basis evaluations from degree 0 through max_order
+    diff1s: (N, max_order + 1) array
+        The basis derivatives from degree 0 through max_order
+    """
+    return __diff1(pts, max_order)
+
+def diff2(pts, max_order):
+    r"""
+    Evaluate Chebyshev polynomials and two derivatives on a set of points
+    --------------------------------------------------------------
+    Inputs:
+    -------
+    pts: (N,) array
+        Points to evaluate polynomial on
+    max_order: int
+        Order of polynomial to evaluate up to
+    Returns:
+    --------
+    evaluations: (N, max_order + 1) array
+        The basis evaluations from degree 0 through max_order
+    diff1s: (N, max_order + 1) array
+        The basis derivatives from degree 0 through max_order
+    diff2s: (N, max_order + 1) array
+        The basis first 2 derivatives from degree 0 through max_order
+    """
+    return __diff2(pts, max_order)
