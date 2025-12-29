@@ -169,8 +169,8 @@ class LinearBasis(AbstractLinearBasis):
     eval: BasisEvalFcn
     diff1: BasisDiff1Fcn
     diff2: BasisDiff2Fcn
-    lo: float = 0.
-    hi: float = 1.
+    lo: float
+    hi: float
 
     def __init__(
             self, max_order: int, eval_or_module: ModuleType | BasisEvalFcn | str,
@@ -185,8 +185,10 @@ class LinearBasis(AbstractLinearBasis):
                 f'Expected max_order >= 1. Got max_order = {max_order}')
         self.max_order = max_order
         if isinstance(eval_or_module, ModuleType | str):
-            mod = BASES[eval_or_module] if isinstance(
-                eval_or_module, str) else eval_or_module
+            if isinstance(eval_or_module, str):
+                mod = BASES[eval_or_module]
+            else:
+                mod = eval_or_module
             basis_spec = mod.__spec__
             assert basis_spec is not None
             basis_name = basis_spec.name.split('.')[-1]
