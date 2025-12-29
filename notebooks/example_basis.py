@@ -45,6 +45,9 @@ solver = optx.LevenbergMarquardt(
 y0 = jnp.zeros((psi.N_shap - 2, N_terms))
 
 # %%
+residual(y0, None)
+
+# %%
 max_steps = 1000
 sol = optx.least_squares(residual, solver, y0, throw=False, max_steps=max_steps)
 

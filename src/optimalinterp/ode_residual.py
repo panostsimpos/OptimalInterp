@@ -250,8 +250,7 @@ def create_collocated_basis_residual(
     basis_eval, basis_diff1, basis_diff2 = psi.evaluate_basis_diff2(t_grid)
     # Get the zero and first order basis at times t=0, t=1
     order0, order1 = fixed_orders
-    assert order0 != order1
-    keep_orders = jnp.delete(jnp.arange(psi.N_shap+1), jnp.array([order0, order1]), assume_unique_indices=True)
+    assert order0 < order1
     bc_scale = basis_eval[[0, 0, -1, -1], [order0, order1, order0, order1]].reshape(2,2)
     # Set the boundary conditions
     inv_bc_scale = jnp.linalg.inv(bc_scale)
@@ -260,8 +259,13 @@ def create_collocated_basis_residual(
 
     def basis_residual(coeffs_psi: Float[Array, "P alpha"], _):
         # Get first two basis elements using boundary conditions
+        bdry_basis = basis_eval[jnp.array([0,-1])]
+        bdry_transform = jnp.concat(
+            (bdry_basis[:,:order0], bdry_basis[:,order0+1:order1], bdry_basis[:,order1+1:]),
+            axis=1
+        )
         first_coeffs = inv_bc_scale @ (
-            bc_shift - (basis_eval[[0, -1], keep_orders] @ coeffs_psi)
+            bc_shift - (bdry_transform @ coeffs_psi)
         )
         # Evaluate the basis and derivatives on full coefficient set
         full_coeffs_psi = jnp.concat((first_coeffs, coeffs_psi))
