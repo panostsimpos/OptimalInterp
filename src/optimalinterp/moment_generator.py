@@ -20,7 +20,7 @@ class MomentGeneratingPhi(ABC):
 
 class GaussianPhi1D(MomentGeneratingPhi):
     def __init__(self, mu: float, sigma: float):
-        """
+        r"""
         Build MomentGeneratingPhi for 1D Gaussian example whwere we take
         Z_0 ~ N(0, 1),
         Z_N ~ N(mu, sigma^2),
