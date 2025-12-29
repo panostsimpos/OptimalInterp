@@ -1,3 +1,19 @@
+# ---
+# jupyter:
+#   jupytext:
+#     cell_metadata_filter: -all
+#     custom_cell_magics: kql
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.11.2
+#   kernelspec:
+#     display_name: optimalinterp
+#     language: python
+#     name: python3
+# ---
+
 # %%
 # %env JAX_DISABLE_JIT 1
 
@@ -13,8 +29,6 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_debug_nans", True)
-
-# %%
 
 
 def rhs(t, y, args):
@@ -85,9 +99,8 @@ plt.xlabel("$t$")
 plt.legend()
 plt.show()
 
+
 # %%
-
-
 def solve(psi_dot_0, *args, **solver_kwargs):
     psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
@@ -134,9 +147,8 @@ solver_kwargs = {
 }
 solve_args = (psi_0, diffrax.Kvaerno5(), term, args)
 
+
 # %%
-
-
 @jax.jit
 def residual_fcn(psi_dot_0, _):
     return residual(psi_dot_0, psi_1, *solve_args, **solver_kwargs)

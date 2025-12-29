@@ -44,8 +44,8 @@ def test_K_kernel():
     # ----------------------
     # Check convolution identity:
     # L_t \ast K_t = F[F^{-1}[L_t]] \ast F[1/F^{-1}[L_t]] = F[1] = pulse-in-freq-space
-    conv_out = oi.circ_convolution(
-        L_t, K_t, domain_type=oi.CONVOLUTION_DOMAIN.FREQ
+    conv_out = oi.convolution.circ_convolution(
+        L_t, K_t, domain_type=oi.convolution.CONVOLUTION_DOMAIN.FREQ
     )
     long_ones = jnp.ones_like(conv_out)
     print("*************CONV OUT:***************")
