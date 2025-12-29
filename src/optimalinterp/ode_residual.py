@@ -142,6 +142,18 @@ def calculate_C(
 def OptimalInterpPDEResidualPt(
     psi_t: PsiT, psi_dot_t: PsiT, psi_diff2_t: PsiT, phi: MomentGeneratingPhi
 ):
+    r"""
+    Evaluate the residual of the optimal interpolant at a given point in time.
+
+    :param psi_t: Evaluation of interpolant basis at time t
+    :type psi_t: PsiT
+    :param psi_dot_t: First derivative of interpolant basis at time t
+    :type psi_dot_t: PsiT
+    :param psi_diff2_t: Second derivative of interpolant basis at time t
+    :type psi_diff2_t: PsiT
+    :param phi: Moment generating function of path
+    :type phi: MomentGeneratingPhi
+    """
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     eltype = Phi.dtype
     D_tens = calculate_D(Phi, Phi_prime)
@@ -157,6 +169,14 @@ __OptimalInterpPDEResidual_vmap = jax.vmap(
 
 
 def create_spline_residual(psi: SplineBasis, phi: MomentGeneratingPhi):
+    """
+    Create a residual function for a given spline basis
+
+    :param psi: Basis of spline functions
+    :type psi: SplineBasis
+    :param phi: Moment generating function
+    :type phi: MomentGeneratingPhi
+    """
     evals, basis_diff1, basis_diff2 = psi.collocated_basis_transform()
 
     def spline_residual(coeffs_psi, _):
@@ -179,6 +199,16 @@ def create_spline_residual(psi: SplineBasis, phi: MomentGeneratingPhi):
 
 
 def pad_coeffs(coeffs: Float[Array, "p-2 alpha"], psi: AbstractLinearBasis, fixed_orders: tuple[int, int]):
+    """
+    Pad the coefficients for a linear basis to ensure function satisfies boundary conditions
+
+    :param coeffs: Non-fixed coefficients
+    :type coeffs: Float[Array, "p-2 alpha"]
+    :param psi: Basis for coefficients
+    :type psi: AbstractLinearBasis
+    :param fixed_orders: Indices of coefficients are constrained
+    :type fixed_orders: tuple[int, int]
+    """
     N_terms = coeffs.shape[1]
     basis_eval = psi.evaluate_basis(jnp.zeros(2).at[1].set(1.))
     order0, order1 = fixed_orders
@@ -191,8 +221,29 @@ def pad_coeffs(coeffs: Float[Array, "p-2 alpha"], psi: AbstractLinearBasis, fixe
     return jnp.concat((first_coeffs, coeffs))
 
 
-def create_collocated_basis_residual(t_grid: Float[Array, " T"], N_terms: int, psi: AbstractLinearBasis, phi: MomentGeneratingPhi, fixed_orders: tuple[int, int], wts: float | Float[Array, " T"] = 1.):
-    """Create a residual using collocation. Assume that the first two elements of the linear basis are fixed to ensure boundary conditions."""
+def create_collocated_basis_residual(
+        t_grid: Float[Array, " T"],
+        N_terms: int, psi: AbstractLinearBasis,
+        phi: MomentGeneratingPhi,
+        fixed_orders: tuple[int, int],
+        wts: float | Float[Array, " T"] = 1.
+    ):
+    """
+    Create a residual using collocation. Assume that the first two elements of the linear basis are fixed to ensure boundary conditions.
+
+    :param t_grid: Grid of points to collocate
+    :type t_grid: Float[Array, "T"]
+    :param N_terms: Number of expansion terms
+    :type N_terms: int
+    :param psi: Basis for expansion terms
+    :type psi: AbstractLinearBasis
+    :param phi: Moment generation function
+    :type phi: MomentGeneratingPhi
+    :param fixed_orders: Indices of coefficients constrained by boundary conditions
+    :type fixed_orders: tuple[int, int]
+    :param wts: Optional weights for collocations
+    :type wts: float | Float[Array, " T"]
+    """
     t_grid = jnp.sort(t_grid)
     assert t_grid[0] == 0. and t_grid[-1] == 1.  # Ensure grid is valid
     # Evaluate basis
