@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
-from jax.experimental import checkify
 from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
 from .basis import SplineBasis, AbstractLinearBasis
 from .convolution import triple_circ_convolve_freq
@@ -292,7 +291,6 @@ def OptimalInterpBVP_ODE_RHS(
     :rtype: Float[Array, "2*N_terms"]
     """
     N_terms = concat_psi.shape[0] // 2
-    checkify.check(2*N_terms == concat_psi.shape[0], "concat_psi must have an even number of rows")
     psi_t, psi_dot_t = concat_psi[:N_terms], concat_psi[N_terms:]
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     D_tens = calculate_D(Phi, Phi_prime)

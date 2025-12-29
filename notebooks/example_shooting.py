@@ -105,9 +105,8 @@ def solve(psi_dot_0, *args, **solver_kwargs):
     psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
     y0 = jnp.concat(
-        (psi_0, psi_dot_0, jnp.zeros(N_terms))
-    )  # TODO: Do we not need 2N zeros in the velocity state?
-    # y0 = jnp.concat((psi_0, psi_dot_0, jnp.zeros(N_terms), jnp.zeros(N_terms)))
+        (psi_0, psi_dot_0, jnp.zeros(2 * N_terms))
+    )
     sol = diffrax.diffeqsolve(
         term,
         solver,
@@ -118,8 +117,10 @@ def solve(psi_dot_0, *args, **solver_kwargs):
         args=solver_args,
         **solver_kwargs,
     )
+    sol_ys = sol.ys
+    assert sol_ys is not None
     return jax.lax.cond(
-        sol.result._value == 0, lambda: sol.ys, lambda: jnp.inf * sol.ys
+        sol.result._value == 0, lambda: sol_ys, lambda: jnp.inf * sol_ys
     )
 
 
@@ -138,7 +139,7 @@ z = jnp.zeros(N_terms)
 psi_0 = z.at[0].set(1.0)
 psi_1 = z.at[-1].set(1.0)
 # .at[jnp.array([0,-1])].set(jnp.array([-1,1]))
-initial_psi_dot_0 = jnp.concat((z, z))
+initial_psi_dot_0 = z
 solver_kwargs = {
     "adjoint": diffrax.DirectAdjoint(),
     "max_steps": 5000,
@@ -200,8 +201,6 @@ plt.legend()
 plt.show()
 
 # %%
-
-
 def eval_velocity(
     x: Float,
     psi: Float[Array, "N"],
@@ -209,7 +208,7 @@ def eval_velocity(
     mu_Z: Float[Array, "N"],
     Sigma_Z: Float[Array, "N N"],
 ) -> Float:
-    """
+    r"""
     Evaluate the conditional velocity v(x,t) = E[\dot X_t | X_t = x].
     Use the formula
         v(x,t) = \sum_\alpha \dot \psi_\alpha(t) \E[Z_\alpha | X_t = x]
@@ -248,9 +247,9 @@ def eval_velocity(
 
 
 def eval_vel_fcn(
-    x, y_t: Float[Array, "4*N"], mu_Z: Float[Array, "N"], Sigma_Z: Float[Array, "N N"]
+    x, y_t: Float[Array, " 4*N"], mu_Z: Float[Array, " N"], Sigma_Z: Float[Array, "N N"]
 ) -> Float:
-    """
+    r"""
     Wrapper to evaluate velocity from concatenated ODE solution y_t.
 
     :param x: Position variable in \Rd.
@@ -260,7 +259,7 @@ def eval_vel_fcn(
     :type mu_Z: Float[Array, "N"]
     :param Sigma_Z: Covariance matrix of the Gaussian variables Z_alpha.
     :type Sigma_Z: Float[Array, "N N"]
-    :return: conditional velocity v(x,t) = E[\dot X_t | X_t = x].
+    :return: conditional velocity $v(x,t) = E[\dot{X_t} | X_t = x]$.
     :rtype: Float
     """
     N = len(mu_Z)
@@ -290,16 +289,12 @@ velocity_vmap = jax.vmap(
 velocity_eval = velocity_vmap(jnp.linspace(-5, 5), ode_sol)
 
 # %%
-velocity_eval.shape
-
-# %%
 plt.plot(jnp.cumsum(jnp.real(velocity_eval)[:, velocity_eval.shape[1] // 2]) / N_t)
 
 # %%
 fig, ax = plt.subplots(figsize=(3, 3))
-ax.imshow(jnp.real(velocity_eval).T, aspect=0.1, extent=(0, 1, -5, 5))
+c = ax.imshow(jnp.real(velocity_eval).T, aspect=0.1, extent=(0, 1, -5, 5))
+fig.colorbar(c)
 ax.set_xlabel("t")
 ax.set_ylabel("x")
 plt.show()
-
-# %%
