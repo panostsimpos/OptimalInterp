@@ -2,3 +2,6 @@
 .vscode
 .github
 *.npy
+*notebooks/examples
+*notebooks/solvers
+*notebooks/visualization

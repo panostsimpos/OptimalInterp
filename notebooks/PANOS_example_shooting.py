@@ -1,3 +1,19 @@
+# ---
+# jupyter:
+#   jupytext:
+#     cell_metadata_filter: -all
+#     custom_cell_magics: kql
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.11.2
+#   kernelspec:
+#     display_name: optimalinterp
+#     language: python
+#     name: python3
+# ---
+
 # %%
 # %env JAX_DISABLE_JIT 1
 
@@ -13,8 +29,6 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_debug_nans", True)
-
-# %%
 
 
 def rhs(t, y, args):
@@ -85,16 +99,12 @@ plt.xlabel("$t$")
 plt.legend()
 plt.show()
 
+
 # %%
-
-
 def solve(psi_dot_0, *args, **solver_kwargs):
     psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
-    y0 = jnp.concat(
-        (psi_0, psi_dot_0, jnp.zeros(N_terms))
-    )  # TODO: Do we not need 2N zeros in the velocity state?
-    # y0 = jnp.concat((psi_0, psi_dot_0, jnp.zeros(N_terms), jnp.zeros(N_terms)))
+    y0 = jnp.concat((psi_0, psi_dot_0, jnp.zeros(2 * N_terms)))
     sol = diffrax.diffeqsolve(
         term,
         solver,
@@ -105,8 +115,10 @@ def solve(psi_dot_0, *args, **solver_kwargs):
         args=solver_args,
         **solver_kwargs,
     )
+    sol_ys = sol.ys
+    assert sol_ys is not None
     return jax.lax.cond(
-        sol.result._value == 0, lambda: sol.ys, lambda: jnp.inf * sol.ys
+        sol.result._value == 0, lambda: sol_ys, lambda: jnp.inf * sol_ys
     )
 
 
@@ -114,6 +126,7 @@ def solve(psi_dot_0, *args, **solver_kwargs):
 def residual(psi_dot_0, psi_1, *args, **solver_kwargs):
     N_terms = len(psi_1)
     pred_y1_concat = solve(psi_dot_0, *args, **solver_kwargs)[-1]
+    # Recall that y1_concat = [psi_real, psi_dot_real, psi_imag, psi_dot_imag]
     real_res = psi_1 - pred_y1_concat[:N_terms]
     im_res = pred_y1_concat[2 * N_terms : 3 * N_terms]
     return jnp.concat((real_res, im_res))
@@ -125,7 +138,7 @@ z = jnp.zeros(N_terms)
 psi_0 = z.at[0].set(1.0)
 psi_1 = z.at[-1].set(1.0)
 # .at[jnp.array([0,-1])].set(jnp.array([-1,1]))
-initial_psi_dot_0 = jnp.concat((z, z))
+initial_psi_dot_0 = z
 solver_kwargs = {
     "adjoint": diffrax.DirectAdjoint(),
     "max_steps": 5000,
@@ -134,9 +147,8 @@ solver_kwargs = {
 }
 solve_args = (psi_0, diffrax.Kvaerno5(), term, args)
 
+
 # %%
-
-
 @jax.jit
 def residual_fcn(psi_dot_0, _):
     return residual(psi_dot_0, psi_1, *solve_args, **solver_kwargs)
@@ -187,19 +199,132 @@ plt.xlabel("$t$")
 plt.legend()
 plt.show()
 
+
+# %%
+def eval_velocity(
+    x: Float,
+    psi: Float[Array, "N"],
+    psi_dot: Float[Array, "N"],
+    mu_Z: Float[Array, "N"],
+    Sigma_Z: Float[Array, "N N"],
+) -> Float:
+    r"""
+    Evaluate the conditional velocity $v(x,t) = E[\dot X_t | X_t = x].
+    Use the formula
+        v(x,t) = \sum_\alpha \dot \psi_\alpha(t) \E[Z_\alpha | X_t = x]
+    Now recalling that
+        X_t = \sum_\alpha \psi_\alpha(t) Z_\alpha
+    and putting all the Z_\alpha in a joint-Gaussian space such that Z_alpha is indep. of Z_\gamma for \alpha \neq \gamma
+    we can compute
+        \E[Z_alpha | X_t = x] = ( \sigma_\alpha \psi_\alpha ) * ( x - \sum_\beta \psi_\beta \mu_\beta ) / ( \sum_\beta \psi_\beta^2 \sigma_\beta )
+    where Z_\alpha \sim N(\mu_\alpha, \sigma_\alpha^2).
+
+    :param x: Position variable in \Rd.
+    :type x: Float
+    :param psi: Coefficients psi_alpha(t) in vector form, for fixed time t.
+    :type psi: Float[Array, "N"]
+    :param psi_dot: Time derivatives of coefficients psi_alpha(t) in vector form, for fixed time t.
+    :type psi_dot: Float[Array, "N"]
+    :param mu_Z: Mean vector of the Gaussian variables Z_alpha.
+    :type mu_Z: Float[Array, "N"]
+    :param Sigma_Z: Covariance matrix of the Gaussian variables Z_alpha.
+    :type Sigma_Z: Float[Array, "N N"]
+    :return: conditional velocity v(x,t) = E[\dot X_t | X_t = x].
+    :rtype: Float
+    """
+
+    N = psi.shape[0]
+    assert psi_dot.shape[0] == N and mu_Z.shape[0] == N and Sigma_Z.shape == (N, N)
+    assert jnp.allclose(Sigma_Z, jnp.diag(jnp.diag(Sigma_Z))), "Non-diagonal Sigma_Z!"
+    var_X_t = jnp.dot(psi, Sigma_Z @ psi)  # Denote Z = (Z_alpha)_alpha
+    mu_X_t = jnp.dot(mu_Z, psi)
+    expect_Z_given_X_t = (
+        mu_Z + (Sigma_Z @ psi * (x - mu_X_t)) / var_X_t
+    )  # works because Sigma_Z is diagonal
+
+    out = psi_dot @ expect_Z_given_X_t
+    return out
+
+
+def eval_vel_fcn(
+    x, y_t: Float[Array, " 4*N"], mu_Z: Float[Array, " N"], Sigma_Z: Float[Array, "N N"]
+) -> Float:
+    r"""
+    Wrapper to evaluate velocity from concatenated ODE solution y_t.
+
+    :param x: Position variable in \Rd.
+    :param y_t: Concatenated ODE solution vector at time t.
+    :type y_t: Float[Array, "4*N"]
+    :param mu_Z: Mean vector of the Gaussian variables Z_alpha.
+    :type mu_Z: Float[Array, "N"]
+    :param Sigma_Z: Covariance matrix of the Gaussian variables Z_alpha.
+    :type Sigma_Z: Float[Array, "N N"]
+    :return: conditional velocity $v(x,t) = E[\dot{X_t} | X_t = x]$.
+    :rtype: Float
+    """
+    N = len(mu_Z)
+    psi_concat = y_t[: 2 * N] + 1j * y_t[2 * N :]
+    psi, psi_dot = psi_concat[:N], psi_concat[N:]
+    return eval_velocity(x, psi, psi_dot, mu_Z, Sigma_Z)
+
+
+# %%
+mu_Z = jnp.linspace(0, phi.mu, N_terms)
+Sigma_Z = jnp.diag((1 - mu_Z) ** 2 + (mu_Z**2) * phi.sigma**2)
+mu_Z, Sigma_Z
+
+# %%
+eval_vel_fcn(1.0, ode_sol[-1], mu_Z, Sigma_Z)
+
+# %%
+velocity_vmap = jax.vmap(
+    jax.vmap(
+        lambda x, y_t: eval_vel_fcn(x, y_t, mu_Z, Sigma_Z),
+        in_axes=(0, None),
+    ),
+    in_axes=(None, 0),
+)
+
+# %%
+velocity_eval = velocity_vmap(jnp.linspace(-5, 5), ode_sol)
+
+# %%
+plt.plot(jnp.cumsum(jnp.real(velocity_eval)[:, velocity_eval.shape[1] // 2]) / N_t)
+
+# %%
+fig, ax = plt.subplots(figsize=(3, 3))
+c = ax.imshow(jnp.real(velocity_eval).T, aspect=0.1, extent=(0, 1, -5, 5))
+fig.colorbar(c)
+ax.set_xlabel("t")
+ax.set_ylabel("x")
+plt.show()
+
 # %%
 # =============================================================================
 # Generic binning-based velocity field computation
 # =============================================================================
 
 
-@jax.jit
+def truncate_on_torus(
+    x: Float[Array, "n_samples"], period: Float
+) -> Float[Array, "n_samples"]:
+    """
+    Truncate samples x onto a torus with given period.
+
+    :param x: Input samples.
+    :param period: Period of the torus.
+    :return: Truncated samples in [-period/2, period/2).
+    """
+    return jnp.mod(x + period / 2, period) - period / 2
+
+
 def compute_velocity_at_t_binned(
     psi: Float[Array, "N"],
     psi_dot: Float[Array, "N"],
     Z_samples: Float[Array, "n_samples N"],
     x_grid: Float[Array, "n_grid"],
     bin_width: Float,
+    kernel_type: str = "gaussian",
 ) -> Float[Array, "n_grid"]:
     """
     Compute v(x,t) = E[dot{X}_t | X_t = x] using binning at a single time t.
@@ -222,10 +347,20 @@ def compute_velocity_at_t_binned(
 
     # For each x in x_grid, find samples in bin and average Xdot
     def velocity_at_x(x):
-        # Soft binning using a smooth kernel (Gaussian-like)
-        # weights = exp(-0.5 * ((X_samples - x) / bin_width)^2)
+        if kernel_type == "gaussian":
+
+            def kernel(x):
+                return jnp.exp(-0.5 * (x) ** 2)
+
+        elif kernel_type == "square":
+
+            def kernel(x):
+                return jnp.where(jnp.abs(x) <= 0.5, 1.0, 0.0)
+
+        else:
+            raise ValueError("Unknown kernel type")
         distances = (X_samples - x) / bin_width
-        weights = jnp.exp(-0.5 * distances**2)
+        weights = kernel(distances)
         weighted_sum = jnp.sum(weights * Xdot_samples)
         weight_total = jnp.sum(weights)
         # Avoid division by zero
@@ -234,24 +369,20 @@ def compute_velocity_at_t_binned(
     return jax.vmap(velocity_at_x)(x_grid)
 
 
-@jax.jit
 def extract_psi_and_psi_dot(
     y_t: Float[Array, "4*N"], N_terms: int
 ) -> tuple[Float[Array, "N"], Float[Array, "N"]]:
     """
     Extract psi and psi_dot from concatenated ODE solution at time t.
 
-    The ODE solution is stored as: [Re(psi), Re(psi_dot), Im(psi), Im(psi_dot)]
-    or similar concatenation. Adjust based on actual storage format.
+    The ODE solution is stored as: [Re(psi), Re(psi_dot), Im(psi), Im(psi_dot)].
 
     :param y_t: Concatenated ODE solution at time t.
     :param N_terms: Number of psi_alpha coefficients.
     :return: (psi, psi_dot) as real arrays (taking real part).
     """
-    # Based on example: y = [Re(psi_concat), Im(psi_concat)] where psi_concat = [psi, psi_dot]
-    psi_concat = y_t[: 2 * N_terms] + 1j * y_t[2 * N_terms : 4 * N_terms]
-    psi = jnp.real(psi_concat[:N_terms])
-    psi_dot = jnp.real(psi_concat[N_terms : 2 * N_terms])
+    psi = y_t[:N_terms]
+    psi_dot = y_t[N_terms : 2 * N_terms]
     return psi, psi_dot
 
 
@@ -272,12 +403,13 @@ def compute_velocity_field_binned(
     :param bin_width: Width for soft binning kernel.
     :return: Velocity field, shape (n_times, n_grid).
     """
-
-    def velocity_at_time(y_t):
+    velocity_list = []
+    for y_t in ode_sol:
         psi, psi_dot = extract_psi_and_psi_dot(y_t, N_terms)
-        return compute_velocity_at_t_binned(psi, psi_dot, Z_samples, x_grid, bin_width)
+        v_t = compute_velocity_at_t_binned(psi, psi_dot, Z_samples, x_grid, bin_width)
+        velocity_list.append(v_t)
 
-    return jax.vmap(velocity_at_time)(ode_sol)
+    return jnp.stack(velocity_list)
 
 
 # %%
@@ -301,6 +433,9 @@ sigma_Z = jnp.sqrt((1 - alpha_ratios) ** 2 + alpha_ratios**2 * phi.sigma**2)
 
 # Sample Z_alpha independently for each alpha
 Z_samples = jax.random.normal(key, shape=(n_samples, N_terms)) * sigma_Z + mu_Z
+
+# Truncate on the torus
+Z_samples = truncate_on_torus(Z_samples, 2 * jnp.pi)
 
 # %%
 # Define x grid and bin width
@@ -342,6 +477,172 @@ ax.set_ylabel("$v(x,t)$")
 ax.set_title("Velocity field at different times")
 ax.legend()
 ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# %%
+# =============================================================================
+# Simulate particle trajectories under velocity field
+# =============================================================================
+
+
+def interpolate_velocity_field(
+    t: float,
+    x: float,
+    saveat_t: Float[Array, "n_times"],
+    x_grid: Float[Array, "n_grid"],
+    velocity_field: Float[Array, "n_times n_grid"],
+) -> float:
+    """
+    Interpolate velocity field v(t, x) at arbitrary (t, x).
+
+    Uses bilinear interpolation in time and space.
+
+    :param t: Time at which to evaluate velocity.
+    :param x: Position at which to evaluate velocity.
+    :param saveat_t: Time grid points.
+    :param x_grid: Spatial grid points.
+    :param velocity_field: Precomputed velocity field values.
+    :return: Interpolated velocity v(t, x).
+    """
+    # Find time indices for interpolation
+    t_idx = jnp.searchsorted(saveat_t, t)
+    t_idx = jnp.clip(t_idx, 1, len(saveat_t) - 1)
+    t_idx_low = t_idx - 1
+    t_idx_high = t_idx
+
+    # Time interpolation weight
+    t_low = saveat_t[t_idx_low]
+    t_high = saveat_t[t_idx_high]
+    t_weight = (t - t_low) / (t_high - t_low + 1e-10)
+
+    # Find spatial indices for interpolation
+    x_idx = jnp.searchsorted(x_grid, x)
+    x_idx = jnp.clip(x_idx, 1, len(x_grid) - 1)
+    x_idx_low = x_idx - 1
+    x_idx_high = x_idx
+
+    # Spatial interpolation weight
+    x_low = x_grid[x_idx_low]
+    x_high = x_grid[x_idx_high]
+    x_weight = (x - x_low) / (x_high - x_low + 1e-10)
+
+    # Bilinear interpolation
+    v_ll = velocity_field[t_idx_low, x_idx_low]
+    v_lh = velocity_field[t_idx_low, x_idx_high]
+    v_hl = velocity_field[t_idx_high, x_idx_low]
+    v_hh = velocity_field[t_idx_high, x_idx_high]
+
+    v_low = (1 - x_weight) * v_ll + x_weight * v_lh
+    v_high = (1 - x_weight) * v_hl + x_weight * v_hh
+
+    v = (1 - t_weight) * v_low + t_weight * v_high
+
+    return v
+
+
+def particle_ode_rhs(t, X, args):
+    """
+    RHS for particle trajectory ODE: dX/dt = v(t, X).
+
+    :param t: Current time.
+    :param X: Current position (scalar for 1D).
+    :param args: Tuple (saveat_t, x_grid, velocity_field).
+    :return: Time derivative dX/dt.
+    """
+    saveat_t, x_grid, velocity_field = args
+    return interpolate_velocity_field(t, X, saveat_t, x_grid, velocity_field)
+
+
+def simulate_particle_trajectory(
+    X0: float,
+    saveat_t: Float[Array, "n_times"],
+    x_grid: Float[Array, "n_grid"],
+    velocity_field: Float[Array, "n_times n_grid"],
+) -> Float[Array, "n_times"]:
+    """
+    Simulate a single particle trajectory under velocity field.
+
+    :param X0: Initial position of particle.
+    :param saveat_t: Time points at which to save trajectory.
+    :param x_grid: Spatial grid for velocity field.
+    :param velocity_field: Precomputed velocity field.
+    :return: Particle trajectory X(t) at times saveat_t.
+    """
+    term = diffrax.ODETerm(particle_ode_rhs)
+    solver = diffrax.Tsit5()  # Explicit RK method for non-stiff ODEs
+    saveat = diffrax.SaveAt(ts=saveat_t)
+    stepsize_controller = diffrax.PIDController(rtol=1e-6, atol=1e-6)
+    args = (saveat_t, x_grid, velocity_field)
+
+    sol = diffrax.diffeqsolve(
+        term,
+        solver,
+        t0=saveat_t[0],
+        t1=saveat_t[-1],
+        dt0=(saveat_t[-1] - saveat_t[0]) / 100,
+        y0=X0,
+        args=args,
+        saveat=saveat,
+        stepsize_controller=stepsize_controller,
+        max_steps=10000,
+    )
+
+    return sol.ys
+
+
+# %%
+# Sample initial positions from standard normal and simulate trajectories
+N_flow_samples = 50
+key_flow = jax.random.PRNGKey(123)
+X0_samples = jax.random.normal(key_flow, shape=(N_flow_samples,))
+X0_samples = truncate_on_torus(X0_samples, 2 * jnp.pi)
+
+# Simulate all trajectories
+trajectories = []
+for i in range(N_flow_samples):
+    traj = simulate_particle_trajectory(X0_samples[i], saveat_t, x_grid, velocity_field)
+    trajectories.append(traj)
+
+trajectories = jnp.stack(trajectories)  # Shape: (N_flow_samples, n_times)
+
+# %%
+# Plot particle trajectories
+fig, ax = plt.subplots(figsize=(8, 6))
+
+# Plot each trajectory
+for i in range(N_flow_samples):
+    ax.plot(saveat_t, trajectories[i], alpha=0.5, lw=1)
+
+ax.set_xlabel("$t$")
+ax.set_ylabel("$X_t$")
+ax.set_title(f"Particle trajectories under flow (N={N_flow_samples})")
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# %%
+# Alternative visualization: trajectories in (t, x) space overlaid on velocity field
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Background: velocity field
+im = ax.imshow(
+    velocity_field.T,
+    aspect="auto",
+    origin="lower",
+    extent=(saveat_t[0], saveat_t[-1], x_grid[0], x_grid[-1]),
+    cmap="RdBu_r",
+    alpha=0.6,
+)
+
+# Overlay particle trajectories
+for i in range(N_flow_samples):
+    ax.plot(saveat_t, trajectories[i], "k-", alpha=0.4, lw=0.8)
+
+ax.set_xlabel("$t$")
+ax.set_ylabel("$x$")
+ax.set_title(f"Particle trajectories on velocity field (N={N_flow_samples})")
+plt.colorbar(im, ax=ax, label="$v(x,t)$")
 plt.tight_layout()
 plt.show()
 

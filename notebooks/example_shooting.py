@@ -104,9 +104,7 @@ plt.show()
 def solve(psi_dot_0, *args, **solver_kwargs):
     psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
-    y0 = jnp.concat(
-        (psi_0, psi_dot_0, jnp.zeros(2 * N_terms))
-    )
+    y0 = jnp.concat((psi_0, psi_dot_0, jnp.zeros(2 * N_terms)))
     sol = diffrax.diffeqsolve(
         term,
         solver,
@@ -128,6 +126,7 @@ def solve(psi_dot_0, *args, **solver_kwargs):
 def residual(psi_dot_0, psi_1, *args, **solver_kwargs):
     N_terms = len(psi_1)
     pred_y1_concat = solve(psi_dot_0, *args, **solver_kwargs)[-1]
+    # Recall that y1_concat = [psi_real, psi_dot_real, psi_imag, psi_dot_imag]
     real_res = psi_1 - pred_y1_concat[:N_terms]
     im_res = pred_y1_concat[2 * N_terms : 3 * N_terms]
     return jnp.concat((real_res, im_res))
@@ -200,6 +199,7 @@ plt.xlabel("$t$")
 plt.legend()
 plt.show()
 
+
 # %%
 def eval_velocity(
     x: Float,
@@ -209,7 +209,7 @@ def eval_velocity(
     Sigma_Z: Float[Array, "N N"],
 ) -> Float:
     r"""
-    Evaluate the conditional velocity v(x,t) = E[\dot X_t | X_t = x].
+    Evaluate the conditional velocity $v(x,t) = E[\dot X_t | X_t = x].
     Use the formula
         v(x,t) = \sum_\alpha \dot \psi_\alpha(t) \E[Z_\alpha | X_t = x]
     Now recalling that
