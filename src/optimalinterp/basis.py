@@ -17,22 +17,52 @@ class AbstractLinearBasis(ABC):
     @property
     @abstractmethod
     def N_shap(self) -> int:
+        r"""
+        Number of shape functions in the basis
+        """
         pass
 
     @abstractmethod
     def evaluate_basis(self, points: EvalPointsT) -> BasisEvalT:
+        r"""
+        Evaluate a linear basis
+
+        :param points: Vector of points to evaluate on
+        :type points: Float[Array, "T"]
+        :return: Evaluation of collection of basis functions
+        :rtype: Float[Array, "T N_shap"]
+        """
         pass
 
     @abstractmethod
     def evaluate_basis_diff(self, points: EvalPointsT) -> Tuple[BasisEvalT, BasisEvalT]:
+        r"""
+        Evaluate a linear basis and one derivative
+
+        :param points: Vector of points to evaluate on
+        :type points: Float[Array, "T"]
+        :return: Evaluation of collection of basis functions and their derivative
+        :rtype: Tuple[Float[Array, "T N_shap"],Float[Array, "T N_shap"]]
+        """
         pass
 
     @abstractmethod
     def evaluate_basis_diff2(self, points: EvalPointsT) -> Tuple[BasisEvalT, BasisEvalT, BasisEvalT]:
+        r"""
+        Evaluate a linear basis and two derivatives
+
+        :param points: Vector of points to evaluate on
+        :type points: Float[Array, "T"]
+        :return: Evaluation of collection of basis functions and two derivatives
+        :rtype: Tuple[Float[Array, "T N_shap"],Float[Array, "T N_shap"],Float[Array, "T N_shap"]]
+        """
         pass
 
 
 class Spline(ABC):
+    r"""
+    Spline $f$ must satisfy $f(j) = \delta_{0j}$ for any integer $j \in \mathbb{Z}$
+    """
     @abstractmethod
     def evaluate(self, points: BasisTensT) -> BasisTensT:
         pass
@@ -58,6 +88,7 @@ def _eval_sinc_spline_diff2(points: BasisTensT):
 
 
 class SincSpline(Spline):
+    r"Sinc spline function"
     def __eq__(self, other):
         return isinstance(other, SincSpline)
 
@@ -76,6 +107,7 @@ class SincSpline(Spline):
 
 
 class HatSpline(Spline):
+    r"Hat Spline function"
     def __eq__(self, other):
         return isinstance(other, HatSpline)
 
@@ -104,13 +136,23 @@ def _global_to_local(N_knots: int, knots: Float[Array, " knots"], points: Float[
 
 
 class SplineBasis(AbstractLinearBasis):
+    """
+    Linear basis of splines
+
+    :var N_knots: Number of knots in the basis
+    :vartype N_knots: int
+    :var knots: Array of knots for the basis
+    :vartype knots: Float[Array, "N_knots"]
+    :var spline: Spline used
+    :vartype spline: Spline
+    """
     N_knots: int
     knots: jnp.ndarray
     spline: Spline
 
     def __init__(self, N_knots, spline: Spline | str):
         r"""
-        Use a master spline (e.g., sinc, piecewise polynomial, etc) that satisfies $f(j) = \delta_{0j}$
+        Use a master spline (e.g., sinc, piecewise polynomial, etc.) that satisfies $f(j) = \delta_{0j}$
         N_knots includes endpoints: must be >= 2
         evaluate(x) -> f(x)
         evaluate_diff(x) -> (f(x), f'(x))
@@ -148,7 +190,6 @@ class SplineBasis(AbstractLinearBasis):
         return evals, diff*scale, diff2*(scale**2)
 
     def collocated_basis_transform(self):
-        # Return [A]_{ij} = b'_j(t_i)
         evals, diff, diff2 = self.evaluate_basis_diff2(
             self.knots/(self.N_knots - 1))
         return evals, diff, diff2
@@ -165,6 +206,9 @@ BasisDiff2Fcn = Callable[[Float[Array, " N"], int],
 
 
 class LinearBasis(AbstractLinearBasis):
+    r"""
+    Simple and general implementation of a linear basis
+    """
     max_order: int
     eval: BasisEvalFcn
     diff1: BasisDiff1Fcn
@@ -175,10 +219,21 @@ class LinearBasis(AbstractLinearBasis):
     def __init__(
             self, max_order: int, eval_or_module: ModuleType | BasisEvalFcn | str,
             diff1: BasisDiff1Fcn | None = None, diff2: BasisDiff2Fcn | None = None,
-            original_interval: tuple = (0., 1.)
+            original_interval: tuple[float, float] = (0., 1.)
     ):
-        r"""
+        """
         Use a general linear basis for approximation. ASSUMES THAT ANY INPUT IS IN (0,1), I.E., OPTIMAL INTERPOLANT SETUP
+
+        :param max_order: Order of the basis
+        :type max_order: int
+        :param eval_or_module: Evaluation function or name of module/class implementing eval/diff1/diff2
+        :type eval_or_module: ModuleType | BasisEvalFcn | str
+        :param diff1: Eval/derivative function
+        :type diff1: BasisDiff1Fcn | None
+        :param diff2: Eval/derivative/2 derivative
+        :type diff2: BasisDiff2Fcn | None
+        :param original_interval: intervale that the basis works on (e.g., (-1,1) for Chebyshev)
+        :type original_interval: tuple[float, float]
         """
         if max_order < 1:
             raise ValueError(
@@ -216,7 +271,6 @@ class LinearBasis(AbstractLinearBasis):
         return self.max_order + 1
 
     def evaluate_basis(self, points):
-        "returns eval.shape = (N_points, N_shap)"
         return self.eval(points*(self.hi - self.lo) + self.lo, self.max_order)
 
     def evaluate_basis_diff(self, points):
