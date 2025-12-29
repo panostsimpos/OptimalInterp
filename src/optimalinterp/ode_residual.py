@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
+from jax.experimental import checkify
 from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
 from .basis import SplineBasis, AbstractLinearBasis
 from .convolution import triple_circ_convolve_freq
@@ -278,9 +279,20 @@ def create_collocated_basis_residual(
 
 
 def OptimalInterpBVP_ODE_RHS(
-    concat_psi: PsiODET, phi: MomentGeneratingPhi, D_infl: Float
+    concat_psi: PsiODET, phi: MomentGeneratingPhi, _: Float
 ) -> PsiODET:
+    """
+    Righthand side for the ODE for the optimal interpolant (i.e., no mass matrix)
+
+    :param concat_psi: A concatenation of (psi, psi_dot)
+    :type concat_psi: Float[Array, "2*N_terms"]
+    :param phi: Moment generating function
+    :type phi: MomentGeneratingPhi
+    :return: The time derivative of (psi, psi_dot)
+    :rtype: Float[Array, "2*N_terms"]
+    """
     N_terms = concat_psi.shape[0] // 2
+    checkify.check(2*N_terms == concat_psi.shape[0], "concat_psi must have an even number of rows")
     psi_t, psi_dot_t = concat_psi[:N_terms], concat_psi[N_terms:]
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     D_tens = calculate_D(Phi, Phi_prime)
@@ -295,6 +307,16 @@ def OptimalInterpBVP_ODE_RHS(
 
 
 def OptimalInterpBVP_DAE_RHS(concat_psi: PsiODET, phi: MomentGeneratingPhi) -> PsiODET:
+    r"""
+    Righthand side for the DAE formulation of the optimal interpolant
+
+    :param concat_psi: A concatenation of (psi, psi_dot)
+    :type concat_psi: Float[Array, "2*N_terms"]
+    :param phi: Moment generating function
+    :type phi: MomentGeneratingPhi
+    :return: The righthand side of $M(y) @ \dot{y} = f(y)$
+    :rtype: Float[Array, "2*N_terms"]
+    """
     N_terms = concat_psi.shape[0] // 2
     psi_t, psi_dot_t = concat_psi[:N_terms], concat_psi[N_terms:]
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
@@ -309,6 +331,18 @@ def OptimalInterpBVP_DAE_RHS(concat_psi: PsiODET, phi: MomentGeneratingPhi) -> P
 def OptimalInterpBVP_DAE_LHS(
     concat_d_psi: PsiODET, concat_psi: PsiODET, phi: MomentGeneratingPhi
 ) -> PsiODET:
+    r"""
+    Lefthand side for the DAE formulation of the optimal interpolant
+
+    :param concat_d_psi: A concatenation of d_t (psi, psi_dot)
+    :type concat_psi: Float[Array, "2*N_terms"]
+    :param concat_psi: A concatenation of (psi, psi_dot)
+    :type concat_psi: Float[Array, "2*N_terms"]
+    :param phi: Moment generating function
+    :type phi: MomentGeneratingPhi
+    :return: The matrix $M$ satisfying $M(y) @ \dot{y} = f(y)$
+    :rtype: Float[Array, "2*N_terms"]
+    """
     N_terms = concat_psi.shape[0] // 2
     psi_t = concat_psi[:N_terms]
     d_psi_t, d_psi_dot_t = concat_d_psi[:N_terms], concat_d_psi[N_terms:]
