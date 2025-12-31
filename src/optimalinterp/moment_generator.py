@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 import jax.numpy as jnp
-from jaxtyping import Array, Float, Complex
+from jaxtyping import Array, Float, Complex, Array
 from typing import Tuple
+import jax
 
 PsiT = Float[Array, "alpha"]
 PhiTens = Complex[Array, "alpha beta"]
@@ -62,3 +63,15 @@ class GaussianPhi1D(MomentGeneratingPhi):
             - eff_sigma_s[:, None]
         )
         return (Phi_s, Phi_prime_s, Phi_double_prime_s)
+
+    def sample(self, key: Array, num_samples: int) -> Float[Array, "num_samples"]:
+        r"""
+        Sample from the Gaussian distribution defined by this moment generating function.
+
+        Args:
+            key: JAX random key.
+            num_samples: Number of samples to draw.
+        Returns:
+            samples: Array of shape (num_samples,) containing the drawn samples.
+        """
+        return jax.random.normal(key, shape=(num_samples,)) * self.sigma + self.mu
