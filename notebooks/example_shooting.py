@@ -19,7 +19,6 @@
 
 # %%
 from jaxtyping import Float, Array
-import equinox as eqx
 import matplotlib.pyplot as plt
 import optimistix as optx
 import jax.numpy as jnp
@@ -32,77 +31,22 @@ jax.config.update("jax_debug_nans", True)
 
 
 def rhs(t, y, args):
+    r"""
+    Simulate RHS of $\dot{y} = M(y)^{-1}f(y), where
+    $$y = (re(\psi), re(\dot{\psi}), im(\psi), im(\dot{\psi}))$$
+    """
     N_psi = len(y) // 2
-    psi_real, psi_imag = y[:N_psi], y[N_psi:]
-    psi = psi_real + (1j * psi_imag)
-    _, phi, D_infl = args
-    d_psi = oi.ode_residual.OptimalInterpBVP_ODE_RHS(psi, phi, D_infl)
-    dy = jnp.concat((jnp.real(d_psi), jnp.imag(d_psi)))
+    psi_concat_real, psi_concat_imag = y[:N_psi], y[N_psi:]
+    psi = psi_concat_real + (1j * psi_concat_imag)
+    phi, D_infl = args
+    d_psi_concat = oi.ode_residual.OptimalInterpBVP_ODE_RHS(psi, phi, D_infl)
+    dy = jnp.concat((jnp.real(d_psi_concat), jnp.imag(d_psi_concat)))
     return dy
-
-
-def lhs(dy, t, y, args, control):
-    _, phi = args
-    return oi.ode_residual.OptimalInterpBVP_DAE_LHS(dy, y, phi)
-
-
-# %%
-N_terms = 3
-psi_0 = jnp.zeros(N_terms, dtype=jnp.complex128)
-psi_0 = psi_0.at[0].set(1.0 + 0.0j)
-psi_dot_0 = jnp.zeros(N_terms, dtype=jnp.complex128)
-psi_dot_0 = psi_dot_0.at[jnp.array([0, -1])].set(jnp.array([-3, 2]))
-psi_concat_0 = jnp.concat((psi_0, psi_dot_0))
-y0 = jnp.concat((jnp.real(psi_concat_0), jnp.imag(psi_concat_0)))
-phi = oi.GaussianPhi1D(mu=2.0, sigma=4.0)
-D_infl = 1e-4
-args = (lhs, phi, D_infl)
-
-# %%
-N_t = 4096
-term = diffrax.ODETerm(rhs)
-solver = diffrax.Kvaerno5()
-saveat_t = jnp.linspace(0, 1, 1001)
-saveat = diffrax.SaveAt(ts=saveat_t)
-stepsize_controller = diffrax.PIDController(rtol=1e-8, atol=1e-8, dtmin=1e-8)
-
-# %%
-sol = diffrax.diffeqsolve(
-    term,
-    solver,
-    t0=saveat_t[0],
-    t1=saveat_t[-1],
-    dt0=1e-3,
-    y0=y0,
-    args=args,
-    saveat=saveat,
-    stepsize_controller=stepsize_controller,
-    max_steps=N_t,
-    throw=False,
-    progress_meter=diffrax.TqdmProgressMeter(),
-)
-
-# %%
-assert sol.ys is not None
-psi_concat_t = sol.ys[:, : 2 * N_terms] + 1j * sol.ys[:, 2 * N_terms :]
-psi_t, psi_dot_t = psi_concat_t[:, :N_terms], psi_concat_t[:, N_terms:]
-plt.plot(
-    saveat_t,
-    sol.ys[:, :N_terms],
-    lw=3,
-    label=["$\\psi_{}$".format(j) for j in range(N_terms)],
-)
-# plt.plot(saveat_t, psi_dot_t)
-plt.xscale("log")
-plt.title("Arbitrary solution for {} $\\psi_\\alpha$ terms".format(N_terms))
-plt.xlabel("$t$")
-plt.legend()
-plt.show()
-
 
 # %%
 def solve(psi_dot_0, *args, **solver_kwargs):
-    psi_0, solver, term, solver_args = args
+    r"Given $\dot{\psi}(0)$, return $\psi(1)$ satisfying ODE."
+    psi_0, solver, term, solver_args, term = args
     N_terms = len(psi_0)
     y0 = jnp.concat((psi_0, psi_dot_0, jnp.zeros(2 * N_terms)))
     sol = diffrax.diffeqsolve(
@@ -133,11 +77,25 @@ def residual(psi_dot_0, psi_1, *args, **solver_kwargs):
 
 
 # %%
-N_terms = 5
+# Target initialization
+target_mu, target_sigma = 2.0, 4.0
+phi = oi.GaussianPhi1D(mu=target_mu, sigma=target_sigma)
+
+# %%
+# ODE initialization
+N_terms, D_infl = 5, 0. # D_infl doesn't do anything right now.
+term = diffrax.ODETerm(rhs) # Create Diffrax term
+# Boundary condition initialization
 z = jnp.zeros(N_terms)
 psi_0 = z.at[0].set(1.0)
 psi_1 = z.at[-1].set(1.0)
-# .at[jnp.array([0,-1])].set(jnp.array([-1,1]))
+
+# %%
+# ODE solve and optimization parameters
+solver = diffrax.Kvaerno5() # ODE time discretization
+solver_args = (phi, D_infl)
+args = (psi_0, solver, term, solver_args, term)
+
 initial_psi_dot_0 = z
 solver_kwargs = {
     "adjoint": diffrax.DirectAdjoint(),
@@ -145,19 +103,20 @@ solver_kwargs = {
     "stepsize_controller": diffrax.PIDController(rtol=1e-8, atol=1e-8, dtmin=1e-8),
     "dt0": 1e-3,
 }
-solve_args = (psi_0, diffrax.Kvaerno5(), term, args)
 
 
 # %%
+# Create jit'ted residual for optimization
 @jax.jit
 def residual_fcn(psi_dot_0, _):
-    return residual(psi_dot_0, psi_1, *solve_args, **solver_kwargs)
-
-
-# %%
-residual(initial_psi_dot_0, psi_1, *solve_args, **solver_kwargs)
+    return residual(psi_dot_0, psi_1, *args, **solver_kwargs)
 
 # %%
+# Test residual evaluation on initial guess to make sure it returns
+residual(initial_psi_dot_0, psi_1, *args, **solver_kwargs)
+
+# %%
+# Choose optimizer as Levenberg--Marquardt
 solver = optx.BestSoFarLeastSquares(
     optx.LevenbergMarquardt(
         rtol=1e-8,
@@ -167,23 +126,32 @@ solver = optx.BestSoFarLeastSquares(
 )
 
 # %%
+# Perform optimization
+N_optimizer_step = 1000
 sol = optx.least_squares(
     residual_fcn,
     solver,
     initial_psi_dot_0,
-    # max_steps=17,
+    max_steps=N_optimizer_step,
     throw=False,
 )
 
 # %%
-sol.result, solver.norm(residual_fcn(sol.value, None)).item()
+# Print optimization result and final residual
+print("{},\n{}".format(
+    sol.result,
+    solver.norm(residual_fcn(sol.value, None)).item()
+))
 
 # %%
-ode_sol = solve(sol.value, *solve_args, saveat=saveat, **solver_kwargs)
+# Get trajectory for the optimized value of $\dot{\psi}(0)$
+N_t = 150
+saveat_t = jnp.linspace(0,1,N_t)
+saveat = diffrax.SaveAt(ts=saveat_t)
+ode_sol = solve(sol.value, *args, saveat=saveat, **solver_kwargs)
 y1_concat = ode_sol[-1]
 psi_1_concat = y1_concat[: 2 * N_terms] + 1j * y1_concat[2 * N_terms :]
 psi_1 = psi_1_concat[:N_terms]
-psi_1
 
 # %%
 plt.plot(
@@ -192,8 +160,6 @@ plt.plot(
     lw=3,
     label=["$\\psi_{}$".format(j) for j in range(N_terms)],
 )
-# plt.plot(saveat_t, psi_dot_t)
-# plt.xscale('log')
 plt.title("Approx optimal soln for {} $\\psi_\\alpha$ terms".format(N_terms))
 plt.xlabel("$t$")
 plt.legend()
@@ -203,9 +169,9 @@ plt.show()
 # %%
 def eval_velocity(
     x: Float,
-    psi: Float[Array, "N"],
-    psi_dot: Float[Array, "N"],
-    mu_Z: Float[Array, "N"],
+    psi: Float[Array, " N"],
+    psi_dot: Float[Array, " N"],
+    mu_Z: Float[Array, " N"],
     Sigma_Z: Float[Array, "N N"],
 ) -> Float:
     r"""
@@ -271,12 +237,10 @@ def eval_vel_fcn(
 # %%
 mu_Z = jnp.linspace(0, phi.mu, N_terms)
 Sigma_Z = jnp.diag((1 - mu_Z) ** 2 + (mu_Z**2) * phi.sigma**2)
-mu_Z, Sigma_Z
+print("Mean: {}\nCovariance:\n{}".format(mu_Z, Sigma_Z))
 
 # %%
-eval_vel_fcn(1.0, ode_sol[-1], mu_Z, Sigma_Z)
-
-# %%
+# Make matrix-valued function (x_i, psi(t_j)) -> v(x_i, t_j)
 velocity_vmap = jax.vmap(
     jax.vmap(
         lambda x, y_t: eval_vel_fcn(x, y_t, mu_Z, Sigma_Z),
@@ -284,17 +248,19 @@ velocity_vmap = jax.vmap(
     ),
     in_axes=(None, 0),
 )
-
-# %%
 velocity_eval = velocity_vmap(jnp.linspace(-5, 5), ode_sol)
 
 # %%
+# Simple quadrature of marginal velocity
 plt.plot(jnp.cumsum(jnp.real(velocity_eval)[:, velocity_eval.shape[1] // 2]) / N_t)
 
 # %%
+# Plot entire velocity field
 fig, ax = plt.subplots(figsize=(3, 3))
 c = ax.imshow(jnp.real(velocity_eval).T, aspect=0.1, extent=(0, 1, -5, 5))
 fig.colorbar(c)
 ax.set_xlabel("t")
 ax.set_ylabel("x")
 plt.show()
+
+# %%
