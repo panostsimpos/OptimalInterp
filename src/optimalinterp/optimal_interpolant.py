@@ -15,4 +15,4 @@ class OptimalInterpolant(NamedTuple):
     t: Float[Array, " T"]
     psi: Float[Array, "T N"]
     psi_dot: Float[Array, "T N"]
-    Z: callable
+    Z: callable  # TODO: I want Z to be a class containing a method called sample that returns Float[Array, "N"] values for the Z_alpha variables to subsequently form the optimal interpolant X_t = Z @ psi(t)
