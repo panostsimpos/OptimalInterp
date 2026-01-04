@@ -362,3 +362,90 @@ plt.tight_layout()
 plt.show()
 
 # %%
+# ========================================================================================
+# Likely DEPRECATED code: compute conditional velocity using closed-form Gaussian formulas
+# ========================================================================================
+
+
+def eval_velocity(
+    x: Float,
+    psi: Float[Array, " N"],
+    psi_dot: Float[Array, " N"],
+    mu_Z: Float[Array, " N"],
+    Sigma_Z: Float[Array, "N N"],
+) -> Float:
+    r"""
+    Evaluate the conditional velocity $v(x,t) = E[\dot X_t | X_t = x].
+    Use the formula
+        v(x,t) = \sum_\alpha \dot \psi_\alpha(t) \E[Z_\alpha | X_t = x]
+    Now recalling that
+        X_t = \sum_\alpha \psi_\alpha(t) Z_\alpha
+    and putting all the Z_\alpha in a joint-Gaussian space such that Z_alpha is indep. of Z_\gamma for \alpha \neq \gamma
+    we can compute
+        \E[Z_alpha | X_t = x] = ( \sigma_\alpha \psi_\alpha ) * ( x - \sum_\beta \psi_\beta \mu_\beta ) / ( \sum_\beta \psi_\beta^2 \sigma_\beta )
+    where Z_\alpha \sim N(\mu_\alpha, \sigma_\alpha^2).
+
+    :param x: Position variable in \Rd.
+    :type x: Float
+    :param psi: Coefficients psi_alpha(t) in vector form, for fixed time t.
+    :type psi: Float[Array, "N"]
+    :param psi_dot: Time derivatives of coefficients psi_alpha(t) in vector form, for fixed time t.
+    :type psi_dot: Float[Array, "N"]
+    :param mu_Z: Mean vector of the Gaussian variables Z_alpha.
+    :type mu_Z: Float[Array, "N"]
+    :param Sigma_Z: Covariance matrix of the Gaussian variables Z_alpha.
+    :type Sigma_Z: Float[Array, "N N"]
+    :return: conditional velocity v(x,t) = E[\dot X_t | X_t = x].
+    :rtype: Float
+    """
+
+    N = psi.shape[0]
+    assert psi_dot.shape[0] == N and mu_Z.shape[0] == N and Sigma_Z.shape == (N, N)
+    assert jnp.allclose(Sigma_Z, jnp.diag(jnp.diag(Sigma_Z))), "Non-diagonal Sigma_Z!"
+    var_X_t = jnp.dot(psi, Sigma_Z @ psi)  # Denote Z = (Z_alpha)_alpha
+    mu_X_t = jnp.dot(mu_Z, psi)
+    expect_Z_given_X_t = (
+        mu_Z + (Sigma_Z @ psi * (x - mu_X_t)) / var_X_t
+    )  # works because Sigma_Z is diagonal
+
+    out = psi_dot @ expect_Z_given_X_t
+    return out
+
+
+def eval_vel_fcn(
+    x, y_t: Float[Array, " 4*N"], mu_Z: Float[Array, " N"], Sigma_Z: Float[Array, "N N"]
+) -> Float:
+    r"""
+    Wrapper to evaluate velocity from concatenated ODE solution y_t.
+
+    :param x: Position variable in \Rd.
+    :param y_t: Concatenated ODE solution vector at time t.
+    :type y_t: Float[Array, "4*N"]
+    :param mu_Z: Mean vector of the Gaussian variables Z_alpha.
+    :type mu_Z: Float[Array, "N"]
+    :param Sigma_Z: Covariance matrix of the Gaussian variables Z_alpha.
+    :type Sigma_Z: Float[Array, "N N"]
+    :return: conditional velocity $v(x,t) = E[\dot{X_t} | X_t = x]$.
+    :rtype: Float
+    """
+    N = len(mu_Z)
+    psi_concat = y_t[: 2 * N] + 1j * y_t[2 * N :]
+    psi, psi_dot = psi_concat[:N], psi_concat[N:]
+    return eval_velocity(x, psi, psi_dot, mu_Z, Sigma_Z)
+
+
+# %%
+mu_Z = jnp.linspace(0, phi.mu, N_terms)
+Sigma_Z = jnp.diag((1 - mu_Z) ** 2 + (mu_Z**2) * phi.sigma**2)
+print("Mean: {}\nCovariance:\n{}".format(mu_Z, Sigma_Z))
+
+# %%
+# Make matrix-valued function (x_i, psi(t_j)) -> v(x_i, t_j)
+velocity_vmap = jax.vmap(
+    jax.vmap(
+        lambda x, y_t: eval_vel_fcn(x, y_t, mu_Z, Sigma_Z),
+        in_axes=(0, None),
+    ),
+    in_axes=(None, 0),
+)
+velocity_eval = velocity_vmap(jnp.linspace(-5, 5), ode_sol)

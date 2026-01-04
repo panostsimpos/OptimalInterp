@@ -195,11 +195,7 @@ def solve(
 if __name__ == "__main__":
     # Define test problem parameters
     N_terms = 5
-    sigma_0 = 1.0
-    sigma_1 = 2.0
-
-    # Create Gaussian moment generating function
-    Phi = oi.GaussianPhi1D(sigma_0, sigma_1)
+    Phi = oi.GaussianPhi1D(mu=2.0, sigma=4.0)
 
     # Solve BVP with shooting method
     print("Solving BVP with shooting method...")
