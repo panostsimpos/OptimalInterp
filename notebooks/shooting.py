@@ -8,18 +8,30 @@ import optimalinterp as oi
 import jax
 from typing import NamedTuple
 
+__all__ = ["OptimalInterpBVPSolution", "solve"]
+
 jax.config.update("jax_enable_x64", True)
 
 
-class OptimalInterpSolution(NamedTuple):
-    """Solution container for optimal interpolation BVP."""
+class OptimalInterpBVPSolution(NamedTuple):
+    """Solution container for optimal interpolation BVP.
 
-    t: Float[Array, " T"]  # Time points
-    psi: Float[Array, "T N"]  # Coefficients ψ_α(t)
-    psi_dot: Float[Array, "T N"]  # Velocities dψ_α/dt
-    initial_velocity: Float[Array, " N"]  # Solved ψ̇(0)
-    residual_norm: float  # Final BVP residual
-    success: bool  # Whether shooting converged
+    Attributes:
+        t: Time points of shape (T,)
+        psi: Real coefficient trajectories ψ_α(t) of shape (T, N)
+        psi_dot: Real velocity trajectories dψ_α/dt of shape (T, N)
+        initial_velocity: Solved initial velocity ψ̇(0) of shape (N,)
+        residual_norm: Final BVP residual ||ψ(1) - ψ_target||
+        success: Whether shooting method converged
+    """
+
+    t: Float[Array, " T"]
+    psi: Float[Array, "T N"]
+    psi_dot: Float[Array, "T N"]
+    initial_velocity: Float[Array, " N"]
+    residual_norm: float
+    optimization_success: bool
+    solver_success: bool
 
 
 def rhs(t, y, args):
@@ -36,7 +48,7 @@ def rhs(t, y, args):
     return dy
 
 
-def solve(psi_dot_0, *args, **solver_kwargs):
+def shoot_once(psi_dot_0, *args, **solver_kwargs):
     r"Given $\dot{\psi}(0)$, return $\psi(1)$ satisfying ODE."
     psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
@@ -52,30 +64,41 @@ def solve(psi_dot_0, *args, **solver_kwargs):
         **solver_kwargs,
     )
     sol_ys = sol.ys
+    sol_result = sol.result
     assert sol_ys is not None
     return jax.lax.cond(
-        sol.result._value == 0, lambda: sol_ys, lambda: jnp.inf * sol_ys
+        sol_result == diffrax.RESULTS.successful,
+        lambda: (sol_ys, sol_result),
+        lambda: (jnp.inf * sol_ys, sol_result),
     )
 
 
 def residual(psi_dot_0, psi_1, *args, **solver_kwargs):
     N_terms = len(psi_1)
     # Recall that for an instation sol of diffrax.Solution the values sol.ys are of shape (time, y_dim)
-    pred_y1_concat = solve(psi_dot_0, *args, **solver_kwargs)[-1]
+    trajectory, _ = shoot_once(psi_dot_0, *args, **solver_kwargs)
+    pred_y1_concat = trajectory[-1]
     # Recall that y1_concat = [psi_real, psi_dot_real, psi_imag, psi_dot_imag]
     real_res = psi_1 - pred_y1_concat[:N_terms]
     im_res = pred_y1_concat[2 * N_terms : 3 * N_terms]
     return jnp.concat((real_res, im_res))
 
 
-def solve_for_psi(
+def solve(
+    Phi: oi.MomentGeneratingPhi,
+    N_terms: int,
+    D_infl: float = 0.0,
     t_span: tuple[float, float] = (0.0, 1.0),
     n_time_points: int = 150,
-    Phi: oi.MomentGeneratingPhi = None,
+    rtol: float = 1e-8,
+    atol: float = 1e-8,
+    max_solver_steps: int = 5000,
+    N_optimizer_steps: int = 1000,
+    verbose: bool = True,
+    plot_solution: bool = True,
+    return_real_part: bool = True,
 ) -> OptimalInterpSolution:
 
-    # ODE initialization
-    N_terms, D_infl = 5, 0.0  # D_infl doesn't do anything right now.
     term = diffrax.ODETerm(rhs)  # Create Diffrax term
 
     # Boundary condition initialization
@@ -85,14 +108,14 @@ def solve_for_psi(
 
     # ODE solve and optimization parameters
     solver = diffrax.Kvaerno5()  # ODE time discretization
-    solver_args = (phi, D_infl)
+    solver_args = (Phi, D_infl)
     args = (psi_0, solver, term, solver_args)
 
     initial_psi_dot_0 = z
     solver_kwargs = {
         "adjoint": diffrax.DirectAdjoint(),
-        "max_steps": 5000,
-        "stepsize_controller": diffrax.PIDController(rtol=1e-8, atol=1e-8, dtmin=1e-8),
+        "max_steps": max_solver_steps,
+        "stepsize_controller": diffrax.PIDController(rtol=rtol, atol=atol, dtmin=1e-8),
         "dt0": 1e-3,
     }
 
@@ -114,38 +137,130 @@ def solve_for_psi(
     )
 
     # Perform optimization
-    N_optimizer_step = 1000
-    sol = optx.least_squares(
+    opt_sol = optx.least_squares(
         residual_fcn,
         solver,
         initial_psi_dot_0,
-        max_steps=N_optimizer_step,
+        max_steps=N_optimizer_steps,
         throw=False,
     )
 
-    # %%
-    # Print optimization result and final residual
-    print(
-        "{},\n{}".format(sol.result, solver.norm(residual_fcn(sol.value, None)).item())
-    )
+    opt_obj_value = solver.norm(residual_fcn(opt_sol.value, None)).item()
 
-    # %%
+    if verbose:
+        # Print optimization result and final residual
+        print("{},\n{}".format(opt_sol.result, opt_obj_value))
+
     # Get trajectory for the optimized value of $\dot{\psi}(0)$
     saveat_t = jnp.linspace(t_span[0], t_span[1], n_time_points)
     saveat = diffrax.SaveAt(ts=saveat_t)
-    ode_sol = solve(sol.value, *args, saveat=saveat, **solver_kwargs)
-    y1_concat = ode_sol[-1]
-    psi_1_concat = y1_concat[: 2 * N_terms] + 1j * y1_concat[2 * N_terms :]
-    psi_1 = psi_1_concat[:N_terms]
-
-    # %%
-    plt.plot(
-        saveat_t,
-        ode_sol[:, :N_terms],
-        lw=3,
-        label=["$\\psi_{}$".format(j) for j in range(N_terms)],
+    ode_sol, ode_result = shoot_once(
+        opt_sol.value, *args, saveat=saveat, **solver_kwargs
     )
-    plt.title("Approx optimal soln for {} $\\psi_\\alpha$ terms".format(N_terms))
+    if return_real_part:
+        psi_t = ode_sol[:, :N_terms]
+        psi_dot_t = ode_sol[:, N_terms : 2 * N_terms]
+    else:
+        concat_psi_t = (
+            ode_sol[:, : 2 * N_terms] + 1j * ode_sol[:, 2 * N_terms : 4 * N_terms]
+        )
+        psi_t = concat_psi_t[:, :N_terms]
+        psi_dot_t = concat_psi_t[:, N_terms:]
+
+    if plot_solution:
+        plt.plot(
+            saveat_t,
+            ode_sol[:, :N_terms],
+            lw=3,
+            label=["$\\psi_{}$".format(j) for j in range(N_terms)],
+        )
+        plt.title("Approx optimal soln for {} $\\psi_\\alpha$ terms".format(N_terms))
+        plt.xlabel("$t$")
+        plt.legend()
+        plt.show()
+
+    return OptimalInterpBVPSolution(
+        t=saveat_t,
+        psi=psi_t,
+        psi_dot=psi_dot_t,
+        initial_velocity=opt_sol.value,
+        residual_norm=opt_obj_value,
+        optimization_success=opt_sol.result == optx.RESULTS.successful,
+        solver_success=ode_result == diffrax.RESULTS.successful,
+    )
+
+
+# %%
+# Test the BVP solver
+if __name__ == "__main__":
+    # Define test problem parameters
+    N_terms = 5
+    sigma_0 = 1.0
+    sigma_1 = 2.0
+
+    # Create Gaussian moment generating function
+    Phi = oi.GaussianPhi1D(sigma_0, sigma_1)
+
+    # Solve BVP with shooting method
+    print("Solving BVP with shooting method...")
+    solution = solve(
+        Phi=Phi,
+        N_terms=N_terms,
+        D_infl=0.0,
+        t_span=(0.0, 1.0),
+        n_time_points=150,
+        rtol=1e-8,
+        atol=1e-8,
+        max_solver_steps=5000,
+        verbose=True,
+        plot_solution=True,
+        return_real_part=True,
+    )
+    # %%
+
+    # Validate solution
+    print("\n" + "=" * 60)
+    print("Solution Validation:")
+    print("=" * 60)
+
+    # Check boundary conditions
+    psi_0_expected = jnp.zeros(N_terms).at[0].set(1.0)
+    psi_1_expected = jnp.zeros(N_terms).at[-1].set(1.0)
+
+    bc_error_0 = jnp.linalg.norm(solution.psi[0] - psi_0_expected)
+    bc_error_1 = jnp.linalg.norm(solution.psi[-1] - psi_1_expected)
+
+    print(f"Boundary condition at t=0: ||ψ(0) - ψ_target|| = {bc_error_0:.2e}")
+    print(f"Boundary condition at t=1: ||ψ(1) - ψ_target|| = {bc_error_1:.2e}")
+    print(f"Final residual norm: {solution.residual_norm:.2e}")
+    print(f"Optimization converged: {solution.optimization_success}")
+    print(f"ODE solver succeeded: {solution.solver_success}")
+
+    # # Check solution quality
+    # tol = 1e-6
+    # assert bc_error_0 < tol, f"Initial BC violated: {bc_error_0}"
+    # assert bc_error_1 < tol, f"Final BC violated: {bc_error_1}"
+    # assert solution.optimization_success, "Optimization failed to converge"
+    # assert solution.solver_success, "ODE solver failed"
+
+    # print("\n✓ All tests passed!")
+
+    # Plot velocity field
+    plt.figure(figsize=(10, 4))
+    plt.subplot(1, 2, 1)
+    plt.plot(solution.t, solution.psi, lw=2)
     plt.xlabel("$t$")
-    plt.legend()
+    plt.ylabel("$\\psi_\\alpha(t)$")
+    plt.title("Coefficient trajectories")
+    plt.grid(True, alpha=0.3)
+
+    plt.subplot(1, 2, 2)
+    plt.plot(solution.t, solution.psi_dot, lw=2)
+    plt.xlabel("$t$")
+    plt.ylabel("$\\dot{\\psi}_\\alpha(t)$")
+    plt.title("Velocity trajectories")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
     plt.show()
+
+# %%
