@@ -97,7 +97,7 @@ def solve(
     verbose: bool = True,
     plot_solution: bool = True,
     return_real_part: bool = True,
-) -> OptimalInterpSolution:
+) -> OptimalInterpBVPSolution:
 
     term = diffrax.ODETerm(rhs)  # Create Diffrax term
 
