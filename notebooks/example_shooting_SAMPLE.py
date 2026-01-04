@@ -27,7 +27,7 @@ import optimalinterp as oi
 import jax
 
 jax.config.update("jax_enable_x64", True)
-jax.config.update("jax_debug_nans", True)
+jax.config.update("jax_debug_nans", True)  # TODO Should we comment out for performance?
 
 
 def rhs(t, y, args):
@@ -35,11 +35,11 @@ def rhs(t, y, args):
     Simulate RHS of $\dot{y} = M(y)^{-1}f(y), where
     $$y = (re(\psi), re(\dot{\psi}), im(\psi), im(\dot{\psi}))$$
     """
-    N_psi = len(y) // 2
+    N_psi = len(y) // 2  # len(y) = 4 * N_terms
     psi_concat_real, psi_concat_imag = y[:N_psi], y[N_psi:]
-    psi = psi_concat_real + (1j * psi_concat_imag)
+    concat_psi = psi_concat_real + (1j * psi_concat_imag)
     phi, D_infl = args
-    d_psi_concat = oi.ode_residual.OptimalInterpBVP_ODE_RHS(psi, phi, D_infl)
+    d_psi_concat = oi.ode_residual.OptimalInterpBVP_ODE_RHS(concat_psi, phi, D_infl)
     dy = jnp.concat((jnp.real(d_psi_concat), jnp.imag(d_psi_concat)))
     return dy
 
@@ -47,7 +47,7 @@ def rhs(t, y, args):
 # %%
 def solve(psi_dot_0, *args, **solver_kwargs):
     r"Given $\dot{\psi}(0)$, return $\psi(1)$ satisfying ODE."
-    psi_0, solver, term, solver_args, term = args
+    psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
     y0 = jnp.concat((psi_0, psi_dot_0, jnp.zeros(2 * N_terms)))
     sol = diffrax.diffeqsolve(
@@ -70,6 +70,7 @@ def solve(psi_dot_0, *args, **solver_kwargs):
 # %%
 def residual(psi_dot_0, psi_1, *args, **solver_kwargs):
     N_terms = len(psi_1)
+    # Recall that for an instation sol of diffrax.Solution the values sol.ys are of shape (time, y_dim)
     pred_y1_concat = solve(psi_dot_0, *args, **solver_kwargs)[-1]
     # Recall that y1_concat = [psi_real, psi_dot_real, psi_imag, psi_dot_imag]
     real_res = psi_1 - pred_y1_concat[:N_terms]
@@ -82,10 +83,10 @@ def residual(psi_dot_0, psi_1, *args, **solver_kwargs):
 target_mu, target_sigma = 2.0, 4.0
 phi = oi.GaussianPhi1D(mu=target_mu, sigma=target_sigma)
 
-# %%
 # ODE initialization
 N_terms, D_infl = 5, 0.0  # D_infl doesn't do anything right now.
 term = diffrax.ODETerm(rhs)  # Create Diffrax term
+
 # Boundary condition initialization
 z = jnp.zeros(N_terms)
 psi_0 = z.at[0].set(1.0)
@@ -95,7 +96,7 @@ psi_1 = z.at[-1].set(1.0)
 # ODE solve and optimization parameters
 solver = diffrax.Kvaerno5()  # ODE time discretization
 solver_args = (phi, D_infl)
-args = (psi_0, solver, term, solver_args, term)
+args = (psi_0, solver, term, solver_args)
 
 initial_psi_dot_0 = z
 solver_kwargs = {
@@ -105,6 +106,10 @@ solver_kwargs = {
     "dt0": 1e-3,
 }
 
+# %%
+# Test residual evaluation on initial guess to make sure it returns
+residual(initial_psi_dot_0, psi_1, *args, **solver_kwargs)
+
 
 # %%
 # Create jit'ted residual for optimization
@@ -112,10 +117,6 @@ solver_kwargs = {
 def residual_fcn(psi_dot_0, _):
     return residual(psi_dot_0, psi_1, *args, **solver_kwargs)
 
-
-# %%
-# Test residual evaluation on initial guess to make sure it returns
-residual(initial_psi_dot_0, psi_1, *args, **solver_kwargs)
 
 # %%
 # Choose optimizer as Levenberg--Marquardt
