@@ -26,13 +26,12 @@ n_samples = 1000
 
 key = jax.random.PRNGKey(0)
 stochastic_basis = GaussianBasis(
-    target_mean=10.0,
-    target_standard_deviation=2.0,
+    mean=10.0,
+    std_dev=2.0,
     N_basis=5,
-    key=key,
     bridge_type="gaussian_convolution",
 )
-samples = stochastic_basis.sample(N_samples=1000)
+samples = stochastic_basis.sample(N_samples=1000, key=key)
 source_samples = samples[:, 0]
 target_samples = samples[:, -1]
 
