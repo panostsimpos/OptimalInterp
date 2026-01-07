@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
-from optimalinterp.randomness import GaussianRandomBasis
+from optimalinterp.stochastic_basis import GaussianBasis
 
 # %%
 
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     n_samples = 1000
 
     # Initialize random basis
-    random_basis = GaussianRandomBasis(N_terms, target_mean, target_std)
+    random_basis = GaussianBasis(N_terms, target_mean, target_std)
 
     # Generate samples
     key = jax.random.PRNGKey(42)
@@ -99,3 +99,5 @@ if __name__ == "__main__":
     print(
         f"Actual Z_{mid_idx}:   mean={jnp.mean(samples[:, mid_idx]):.4f}, std={jnp.std(samples[:, mid_idx]):.4f}"
     )
+
+# %%
