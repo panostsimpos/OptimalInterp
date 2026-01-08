@@ -81,22 +81,35 @@ plt.show()
 # coefficients $t \mapsto \psi(t)$ have not yet been computed.
 
 # However, before we build an optimal interpolant we build a *standard stochastic interpolant*
-# to give ourselves a point of comparison.
+# to give ourselves a point of comparison. That is, we instantiate the stochasitc interpolant
+# $$ X_t = (1 - t) X_0 + t X_1 $$
 # %%
+
+simple_stochastic_basis = GaussianBasis(
+    mean=10.0,
+    std_dev=2.0,
+    N_basis=2,
+    bridge_type="gaussian_convolution",
+)
+
+simple_psi = jnp.array(
+    [
+        jnp.linspace(1, 0, 100),
+        jnp.linspace(0, 1, 100),
+    ]
+).T
 
 standard_interpolant = OptimalInterpolant(
     t=jnp.linspace(0, 1, 100),  # 100 time points
-    Z=stochastic_basis,
-).with_psi(
-    psi=jnp.linspace(0, 1, 100)[:, None] * jnp.ones((1, stochastic_basis.N_basis))
-)
+    Z=simple_stochastic_basis,
+).with_psi(psi=simple_psi)
 
 # Plot sample paths of the standard interpolant
-n_paths = 20
+n_paths = 50
 t_eval = jnp.linspace(0, 1, 100)
-key, subkey = jax.random.split(key)
+key = jax.random.PRNGKey(0)
 sample_paths = standard_interpolant(
-    N_samples=n_paths, key=subkey, t_eval=t_eval
+    N_samples=n_paths, key=key, t_eval=t_eval
 )  # Shape: (n_paths, n_times)
 
 fig, ax = plt.subplots(figsize=(10, 6))

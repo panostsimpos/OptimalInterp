@@ -64,12 +64,12 @@ class OptimalInterpolant(eqx.Module):
         )  # Shape (N_basis, M)
 
         # Sample Z
-        Z_sampled = self.Z.sample(
+        Z_samples = self.Z.sample(
             N_samples=N_samples, key=key
         )  # Shape (N_samples, N_basis)
 
         # Compute X_t = Σ_{α=1}^N Z_α ψ_α(t)
-        X_t = Z_sampled @ psi_eval  # Shape (N_samples, M)
+        X_t = Z_samples @ psi_eval  # Shape (N_samples, M)
         X_t = X_t  # Shape (N_samples, M)
 
         return X_t
