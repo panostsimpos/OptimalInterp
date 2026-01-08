@@ -80,6 +80,38 @@ plt.show()
 # Note that upon instantiation, one *will not* be able to call the interpolant, as the
 # coefficients $t \mapsto \psi(t)$ have not yet been computed.
 
+# However, before we build an optimal interpolant we build a *standard stochastic interpolant*
+# to give ourselves a point of comparison.
+# %%
+
+standard_interpolant = OptimalInterpolant(
+    t=jnp.linspace(0, 1, 100),  # 100 time points
+    Z=stochastic_basis,
+).with_psi(
+    psi=jnp.linspace(0, 1, 100)[:, None] * jnp.ones((1, stochastic_basis.N_basis))
+)
+
+# Plot sample paths of the standard interpolant
+n_paths = 20
+t_eval = jnp.linspace(0, 1, 100)
+key, subkey = jax.random.split(key)
+sample_paths = standard_interpolant(
+    N_samples=n_paths, key=subkey, t_eval=t_eval
+)  # Shape: (n_paths, n_times)
+
+fig, ax = plt.subplots(figsize=(10, 6))
+t_vals = standard_interpolant.t
+
+for i in range(n_paths):
+    ax.plot(t_vals, sample_paths[i, :], alpha=0.5, linewidth=1)
+
+ax.set_title("Standard Interpolant Sample Paths")
+ax.set_xlabel("Time t")
+ax.set_ylabel("x")
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
 # %%
 
 optimal_interpolant = OptimalInterpolant(
