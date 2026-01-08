@@ -9,11 +9,11 @@ import matplotlib.pyplot as plt
 import optimalinterp as oi
 from scipy.stats import gaussian_kde
 from optimalinterp.stochastic_basis import GaussianBasis
-from optimalinterp.optimal_interpolant import OptimalInterpolant
+from optimalinterp.optimal_interpolant import OptimalInterpolant, compute_optimal_psi
 
 # %% [markdown]
 # ## 1. Problem Setup
-# We start by building the problem. The core object here is the "StpchasticBasis" which defined the family $(Z_\alpha)_{\alpha=1}^N$ of random variables that interpolates between the source and target measures.
+# We start by building the problem. The core object here is the "StochasticBasis" which defined the family $(Z_\alpha)_{\alpha=1}^N$ of random variables that interpolates between the source and target measures.
 # Namely, by construction we have
 # $$ Z_0 \overset{d}{=} X_0 \quad Z_N \overset{d}{=} X_1 $$
 # where $X_0 \sim \mu$ and $X_1 \sim \nu$ are the source and target measures respectively.
@@ -28,7 +28,7 @@ key = jax.random.PRNGKey(0)
 stochastic_basis = GaussianBasis(
     mean=10.0,
     std_dev=2.0,
-    N_basis=5,
+    N_basis=3,
     bridge_type="gaussian_convolution",
 )
 samples = stochastic_basis.sample(N_samples=1000, key=key)
@@ -127,7 +127,41 @@ plt.show()
 
 # %%
 
-optimal_interpolant = OptimalInterpolant(
+interpolant = OptimalInterpolant(
     t=jnp.linspace(0, 1, 100),  # 100 time points
     Z=stochastic_basis,
 )
+
+# %% [markdown]
+# ## 2. Compute Optimal Coefficients
+# Next, we compute the optimal coefficients $t \mapsto \psi(t)$ for the optimal interpolant.
+# This is done by calling the `compute_optimal_psi` method.
+# %%
+optimal_interpolant = compute_optimal_psi(interpolant)
+# %%
+# %% [markdown]
+# ## 3. Visualize Sample Paths and mean velocity.
+# We start by plotting the sample paths.
+
+# Plot sample paths of the standard interpolant
+n_paths = 50
+t_eval = jnp.linspace(0, 1, 100)
+key = jax.random.PRNGKey(0)
+sample_paths = optimal_interpolant(
+    N_samples=n_paths, key=key, t_eval=t_eval
+)  # Shape: (n_paths, n_times)
+
+fig, ax = plt.subplots(figsize=(10, 6))
+t_vals = optimal_interpolant.t
+
+for i in range(n_paths):
+    ax.plot(t_vals, sample_paths[i, :], alpha=0.5, linewidth=1)
+
+ax.set_title("Optimal Interpolant Sample Paths")
+ax.set_xlabel("Time t")
+ax.set_ylabel("x")
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# %%

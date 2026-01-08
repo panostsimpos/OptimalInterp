@@ -5,6 +5,7 @@ import equinox as eqx
 from typing import Optional
 import jax.numpy as jnp
 import jax
+import optimalinterp.shooting as shooting
 
 
 class OptimalInterpolant(eqx.Module):
@@ -73,3 +74,87 @@ class OptimalInterpolant(eqx.Module):
         X_t = X_t  # Shape (N_samples, M)
 
         return X_t
+
+
+def compute_optimal_psi(
+    interpolant: OptimalInterpolant,
+    **solver_kwargs,
+) -> shooting.OptimalInterpBVPSolution:
+    r"""
+    Compute the optimal coefficient trajectories ψ(t) for the given optimal interpolant
+    by solving the boundary value problem using the shooting method.
+
+    Args:
+        interpolant: An instance of OptimalInterpolant with defined Z and t.
+        **solver_kwargs: Optional keyword arguments for the ODE solver. Supported options:
+            - D_infl: Inflation parameter (default: 0.0)
+            - t_span: Interval containing time lower and upper bound (default: (0.0, 1.0))
+            - n_time_points: Number of time discretization points (default: 150)
+            - rtol: Relative tolerance (default: 1e-8)
+            - atol: Absolute tolerance (default: 1e-8)
+            - max_solver_steps: Maximum solver iterations (default: 5000)
+            - verbose: Print solver progress (default: True)
+            - plot_solution: Generate solution plots (default: True)
+            - return_real_part: Return only real part of solution (default: True)
+
+    Returns:
+        An instance of OptimalInterpBVPSolution containing the computed trajectories and metadata.
+    """
+    # Default parameters
+    defaults = {
+        "D_infl": 0.0,
+        "t_span": (0.0, 1.0),
+        "n_time_points": 150,
+        "rtol": 1e-8,
+        "atol": 1e-8,
+        "max_solver_steps": 5000,
+        "verbose": True,
+        "plot_solution": True,
+        "return_real_part": True,
+    }
+
+    # Merge user kwargs with defaults (user values override defaults)
+    merged_kwargs = {**defaults, **solver_kwargs}
+
+    # Obtain Phi and solve using shooting method
+    stochastic_basis = interpolant.Z
+    Phi = stochastic_basis.build_moment_generating_phi()
+    N_terms = stochastic_basis.N_basis
+    (
+        t,
+        psi,
+        psi_dot,
+        initial_velocity,
+        residual_norm,
+        optimization_success,
+        solver_success,
+    ) = shooting.solve(Phi=Phi, N_terms=N_terms, **merged_kwargs)
+
+    # Unpack solution and update interpolant
+
+    def update_interpolant(
+        interpolant, psi, psi_dot, optimization_success, solver_success
+    ):
+        def on_success(interpolant, psi, psi_dot):
+            return interpolant.with_psi(psi).with_psi_dot(psi_dot)
+
+        def on_failure(interpolant, psi, psi_dot):
+            jax.debug.print(
+                "Warning: BVP solver did not succeed. Returning interpolant without updated psi and psi_dot."
+            )
+            return interpolant
+
+        return jax.lax.cond(
+            optimization_success & solver_success,
+            on_success,
+            on_failure,
+            *(interpolant, psi, psi_dot),
+        )
+
+    return update_interpolant(
+        interpolant,
+        psi,
+        psi_dot,
+        optimization_success,
+        solver_success,
+    )
