@@ -22,6 +22,7 @@ class OptimalInterpolant(eqx.Module):
     Z: StochasticBasis
     psi: Optional[Float[Array, "T N"]] = None
     psi_dot: Optional[Float[Array, "T N"]] = None
+    has_solution: bool = False
 
     def with_psi(self, psi):
         """
@@ -36,6 +37,12 @@ class OptimalInterpolant(eqx.Module):
         return eqx.tree_at(
             lambda m: m.psi_dot, self, psi_dot, is_leaf=lambda x: x is None
         )
+
+    def with_has_solution(self, has_solution: bool):
+        return eqx.tree_at(lambda m: m.has_solution, self, has_solution)
+
+    def with_t(self, t: Float[Array, " T"]):
+        return eqx.tree_at(lambda m: m.t, self, t)
 
     def __call__(
         self, key: jax.Array, t_eval: Float[Array, "M"], N_samples: int
@@ -62,7 +69,11 @@ class OptimalInterpolant(eqx.Module):
                 jnp.interp(t_eval, self.t, self.psi[:, n])
                 for n in range(self.psi.shape[1])
             ]
-        )  # Shape (N_basis, M)
+        )  # Shape (N_basis, M) #TODO: Make this JIT compatible
+
+        # psi_eval = jax.vmap(
+        #     lambda col: jnp.interp(t_eval, self.t, col), in_axes=1, out_axes=0
+        # )(self.psi)
 
         # Sample Z
         Z_samples = self.Z.sample(
@@ -108,6 +119,7 @@ def compute_optimal_psi(
         "rtol": 1e-8,
         "atol": 1e-8,
         "max_solver_steps": 5000,
+        "N_optimizer_steps": 1000,
         "verbose": True,
         "plot_solution": True,
         "return_real_part": True,
@@ -136,12 +148,20 @@ def compute_optimal_psi(
         interpolant, psi, psi_dot, optimization_success, solver_success
     ):
         def on_success(interpolant, psi, psi_dot):
-            return interpolant.with_psi(psi).with_psi_dot(psi_dot)
+            interpolant = interpolant.with_psi(psi)
+            interpolant = interpolant.with_psi_dot(psi_dot)
+            interpolant = interpolant.with_has_solution(True)
+            interpolant = interpolant.with_t(t)
+            return interpolant
 
         def on_failure(interpolant, psi, psi_dot):
             jax.debug.print(
                 "Warning: BVP solver did not succeed. Returning interpolant without updated psi and psi_dot."
             )
+            interpolant = interpolant.with_psi(jnp.zeros_like(psi))
+            interpolant = interpolant.with_psi_dot(jnp.zeros_like(psi_dot))
+            interpolant = interpolant.with_has_solution(False)
+            interpolant = interpolant.with_t(t)
             return interpolant
 
         return jax.lax.cond(

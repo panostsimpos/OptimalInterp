@@ -26,9 +26,9 @@ n_samples = 1000
 
 key = jax.random.PRNGKey(0)
 stochastic_basis = GaussianBasis(
-    mean=10.0,
-    std_dev=2.0,
-    N_basis=3,
+    mean=2.0,
+    std_dev=4.0,
+    N_basis=5,
     bridge_type="gaussian_convolution",
 )
 samples = stochastic_basis.sample(N_samples=1000, key=key)
@@ -152,10 +152,8 @@ sample_paths = optimal_interpolant(
 )  # Shape: (n_paths, n_times)
 
 fig, ax = plt.subplots(figsize=(10, 6))
-t_vals = optimal_interpolant.t
-
 for i in range(n_paths):
-    ax.plot(t_vals, sample_paths[i, :], alpha=0.5, linewidth=1)
+    ax.plot(t_eval, sample_paths[i, :], alpha=0.5, linewidth=1)
 
 ax.set_title("Optimal Interpolant Sample Paths")
 ax.set_xlabel("Time t")

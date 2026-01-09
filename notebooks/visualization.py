@@ -3,8 +3,8 @@ import optimistix as optx
 import jax.numpy as jnp
 from jaxtyping import Float, Array
 import jax
-import optimalinterp as oi
 import diffrax
+from optimalinterp.optimal_interpolant import OptimalInterpolant
 
 # %%
 # =============================================================================
@@ -13,8 +13,8 @@ import diffrax
 
 
 def truncate_on_torus(
-    x: Float[Array, "n_samples"], period: Float
-) -> Float[Array, "n_samples"]:
+    x: Float[Array, "N_samples"], period: Float
+) -> Float[Array, "N_samples"]:
     """
     Truncate samples x onto a torus with given period.
 
@@ -26,34 +26,38 @@ def truncate_on_torus(
 
 
 def compute_velocity_at_t_binned(
-    psi: Float[Array, "N"],
-    psi_dot: Float[Array, "N"],
-    Z_samples: Float[Array, "n_samples N"],
-    x_grid: Float[Array, "n_grid"],
+    interpolant: OptimalInterpolant,
+    key: jax.Array,
+    x_span: tuple[float, float],
     bin_width: Float,
     kernel_type: str = "gaussian",
+    N_samples: int = 1000,
 ) -> Float[Array, "n_grid"]:
     """
     Compute v(x,t) = E[dot{X}_t | X_t = x] using binning at a single time t.
+    Given an interopolant X_t = Σ_{α=1}^N Z_α ψ_α(t) with time derivative
 
-    Given samples Z^{(i)}_alpha, we compute:
-        X_t^{(i)} = sum_alpha psi_alpha * Z^{(i)}_alpha
-        dot{X}_t^{(i)} = sum_alpha dot{psi}_alpha * Z^{(i)}_alpha
     Then estimate v(x,t) by averaging dot{X}_t over samples where X_t falls in a bin around x.
 
-    :param psi: Coefficients psi_alpha(t) at time t.
-    :param psi_dot: Time derivatives dot{psi}_alpha(t) at time t.
-    :param Z_samples: Samples of Z_alpha, shape (n_samples, N_terms).
-    :param x_grid: Grid of x values where to evaluate v(x,t).
+    :param interpolant: An instance of OptimalInterpolant.
+    :param key: JAX PRNG key.
+    :param x_span: Tuple (x_min, x_max) defining grid range.
     :param bin_width: Width of bins for conditioning.
-    :return: Velocity field v(x,t) evaluated on x_grid.
+    N_samples: Number of samples of Z_α to use.
+
+    Returns:
+    :return: Velocity field v(x,t) evaluated on x_grid and time grid interpolant.t.
     """
     # Compute X_t and dot{X}_t for all samples
-    X_samples = Z_samples @ psi  # (n_samples,)
-    Xdot_samples = Z_samples @ psi_dot  # (n_samples,)
+    Z_samples = interpolant.Z.sample(
+        N_samples=N_samples, key=key
+    )  # (N_samples, N_basis)
+    psi, psi_dot = interpolant.psi, interpolant.psi_dot  # (T, N_basis)
+    X_samples = Z_samples @ psi.T  # (N_samples, T)
+    Xdot_samples = Z_samples @ psi_dot.T  # (N_samples, T)
 
     # For each x in x_grid, find samples in bin and average Xdot
-    def velocity_at_x(x):
+    def velocity_at_x_and_t(x, X_samples_t, Xdot_samples_t):
         if kernel_type == "gaussian":
 
             def kernel(x):
@@ -66,6 +70,7 @@ def compute_velocity_at_t_binned(
 
         else:
             raise ValueError("Unknown kernel type")
+
         distances = (X_samples - x) / bin_width
         weights = kernel(distances)
         weighted_sum = jnp.sum(weights * Xdot_samples)
@@ -73,30 +78,14 @@ def compute_velocity_at_t_binned(
         # Avoid division by zero
         return jnp.where(weight_total > 1e-10, weighted_sum / weight_total, 0.0)
 
+    x_grid = jnp.linspace(x_span[0], x_span[1], 1 / bin_width)
     return jax.vmap(velocity_at_x)(x_grid)
-
-
-def extract_psi_and_psi_dot(
-    y_t: Float[Array, "4*N"], N_terms: int
-) -> tuple[Float[Array, "N"], Float[Array, "N"]]:
-    """
-    Extract psi and psi_dot from concatenated ODE solution at time t.
-
-    The ODE solution is stored as: [Re(psi), Re(psi_dot), Im(psi), Im(psi_dot)].
-
-    :param y_t: Concatenated ODE solution at time t.
-    :param N_terms: Number of psi_alpha coefficients.
-    :return: (psi, psi_dot) as real arrays (taking real part).
-    """
-    psi = y_t[:N_terms]
-    psi_dot = y_t[N_terms : 2 * N_terms]
-    return psi, psi_dot
 
 
 def compute_velocity_field_binned(
     ode_sol: Float[Array, "n_times 4*N"],
-    Z_samples: Float[Array, "n_samples N"],
-    x_grid: Float[Array, "n_grid"],
+    Z_samples: Float[Array, "N_samples N"],
+    x_span: tuple[float, float],
     N_terms: int,
     bin_width: Float = 0.5,
 ) -> Float[Array, "n_times n_grid"]:
@@ -104,7 +93,7 @@ def compute_velocity_field_binned(
     Compute velocity field v(x,t) over all times and x positions using binning.
 
     :param ode_sol: ODE solution array, shape (n_times, 4*N_terms).
-    :param Z_samples: Samples of Z_alpha, shape (n_samples, N_terms).
+    :param Z_samples: Samples of Z_alpha, shape (N_samples, N_terms).
     :param x_grid: Grid of x values, shape (n_grid,).
     :param N_terms: Number of psi_alpha coefficients.
     :param bin_width: Width for soft binning kernel.
@@ -131,7 +120,7 @@ def compute_velocity_field_binned(
 #   sigma_alpha^2 = (1 - alpha/N)^2 + (alpha/N)^2 * sigma^2
 
 key = jax.random.PRNGKey(42)
-n_samples = 10000
+N_samples = 10000
 
 # Compute per-alpha means and standard deviations
 alpha_ratios = jnp.arange(N_terms) / (N_terms - 1)
@@ -139,7 +128,7 @@ mu_Z = alpha_ratios * phi.mu
 sigma_Z = jnp.sqrt((1 - alpha_ratios) ** 2 + alpha_ratios**2 * phi.sigma**2)
 
 # Sample Z_alpha independently for each alpha
-Z_samples = jax.random.normal(key, shape=(n_samples, N_terms)) * sigma_Z + mu_Z
+Z_samples = jax.random.normal(key, shape=(N_samples, N_terms)) * sigma_Z + mu_Z
 
 # Truncate on the torus
 Z_samples = truncate_on_torus(Z_samples, 2 * jnp.pi)
