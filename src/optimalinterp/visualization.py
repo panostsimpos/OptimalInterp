@@ -1,20 +1,25 @@
 # %%
 import matplotlib.pyplot as plt
-import optimistix as optx
 import jax.numpy as jnp
 from jaxtyping import Float, Array
 import jax
 import diffrax
-from optimalinterp.optimal_interpolant import OptimalInterpolant
+from optimalinterp.optimal_interpolant import ModalInterpolant, modal_interpolant_factory
+
+__all__ = [
+    "visualize_interpolant_flow"
+]
 
 # %%
 # =============================================================================
 # Generic binning-based velocity field computation
 # =============================================================================
 
+def make_extent(*args)->tuple[float, float, float, float]:
+    return tuple(a.item() for a in args)
 
 def compute_velocity(
-    interpolant: OptimalInterpolant,
+    interpolant: ModalInterpolant,
     key: jax.Array,
     x_span: tuple[float, float],
     bin_width: Float,
@@ -37,20 +42,20 @@ def compute_velocity(
     :return: Velocity values at grid points, shape (x_grid, t_grid).
     """
     # Compute X_t and dot{X}_t for all samples
-    Z_samples = interpolant.Z.sample(
-        N_samples=N_samples, key=key
-    )  # (N_samples, N_basis)
-    psi, psi_dot = interpolant.psi, interpolant.psi_dot  # (T, N_basis)
-    X_samples = Z_samples @ psi.T  # (N_samples, T)
-    Xdot_samples = Z_samples @ psi_dot.T  # (N_samples, T)
+    # Z_samples = interpolant.Z.sample(
+    #     N_samples=N_samples, key=key
+    # )  # (N_samples, N_basis)
+    # psi, psi_dot = interpolant.psi, interpolant.psi_dot  # (T, N_basis)
+    # X_samples = Z_samples @ psi.T  # (N_samples, T)
+    # Xdot_samples = Z_samples @ psi_dot.T  # (N_samples, T)
+
+    X_samples, Xdot_samples = interpolant.sample_solution_and_deriv(key, N_samples, None)
 
     if kernel_type == "gaussian":
-
         def kernel(x):
             return jnp.exp(-0.5 * (x) ** 2)
 
     elif kernel_type == "square":
-
         def kernel(x):
             return jnp.where(jnp.abs(x) <= 0.5, 1.0, 0.0)
 
@@ -68,7 +73,7 @@ def compute_velocity(
         return jnp.where(weight_total > 1e-10, weighted_sum / weight_total, 0.0)
 
     x_grid = jnp.arange(x_span[0], x_span[1], bin_width)
-    t_indices = jnp.arange(len(interpolant.t))
+    t_indices = jnp.arange(len(interpolant.default_tgrid()))
 
     # Shape (t_grid, x_grid)
     velocity_field = jax.vmap(
@@ -80,8 +85,8 @@ def compute_velocity(
 
 def plot_velocity_field(
     velocity_field: Float[Array, "x_grid t_grid"],
-    x_grid: Float[Array, "x_grid"],
-    t_grid: Float[Array, "t_grid"],
+    x_grid: Float[Array, " x_grid"],
+    t_grid: Float[Array, " t_grid"],
 ):
     """
     Plot the velocity field v(x,t).
@@ -97,7 +102,7 @@ def plot_velocity_field(
         velocity_field.T,
         aspect="auto",
         origin="lower",
-        extent=(t_grid[0], t_grid[-1], x_grid[0], x_grid[-1]),
+        extent=make_extent(t_grid[0], t_grid[-1], x_grid[0], x_grid[-1]),
         cmap="RdBu_r",
     )
     ax.set_xlabel("$t$")
@@ -111,10 +116,10 @@ def plot_velocity_field(
 def interpolate_velocity_field(
     t: float,
     x: float,
-    time_grid: Float[Array, "n_times"],
-    x_grid: Float[Array, "n_grid"],
+    time_grid: Float[Array, " n_times"],
+    x_grid: Float[Array, " n_grid"],
     velocity_field: Float[Array, "n_times n_grid"],
-) -> float:
+) -> Float[Array, "1"]:
     """
     Interpolate velocity field v(t, x) at arbitrary (t, x).
 
@@ -178,10 +183,10 @@ def particle_ode_rhs(t, X, args):
 
 def simulate_particle_trajectory(
     X0: float,
-    time_grid: Float[Array, "n_times"],
-    x_grid: Float[Array, "n_grid"],
+    time_grid: Float[Array, " n_times"],
+    x_grid: Float[Array, " n_grid"],
     velocity_field: Float[Array, "n_times n_grid"],
-) -> Float[Array, "n_times"]:
+) -> Float[Array, " n_times"]:
     """
     Simulate a single particle trajectory under velocity field.
 
@@ -209,15 +214,15 @@ def simulate_particle_trajectory(
         stepsize_controller=stepsize_controller,
         max_steps=10000,
     )
-
+    assert sol.ys is not None
     return sol.ys
 
 
 def plot_flow_field(
-    interpolant: OptimalInterpolant,
+    interpolant: ModalInterpolant,
     velocity_field: Float[Array, "x_grid t_grid"],
-    x_grid: Float[Array, "x_grid"],
-    t_grid: Float[Array, "t_grid"],
+    x_grid: Float[Array, " x_grid"],
+    t_grid: Float[Array, " t_grid"],
     key: jax.Array,
     N_flow_samples: int = 20,
 ):
@@ -235,13 +240,13 @@ def plot_flow_field(
     """
 
     # Sample initial positions
-    X0_samples = interpolant.Z.sample(N_samples=N_flow_samples, key=key)[:, 0]
+    X0_samples = interpolant.sample_modes(key, N_flow_samples)[:, 0]
 
     # Simulate all trajectories
     trajectories = []
     for i in range(N_flow_samples):
         traj = simulate_particle_trajectory(
-            X0_samples[i], t_grid, x_grid, velocity_field
+            X0_samples[i].item(), t_grid, x_grid, velocity_field
         )
         trajectories.append(traj)
 
@@ -271,7 +276,7 @@ def plot_flow_field(
         velocity_field.T,
         aspect="auto",
         origin="lower",
-        extent=(t_grid[0], t_grid[-1], x_grid[0], x_grid[-1]),
+        extent=make_extent(t_grid[0], t_grid[-1], x_grid[0], x_grid[-1]),
         cmap="RdBu_r",
         alpha=0.6,
     )
@@ -289,7 +294,7 @@ def plot_flow_field(
 
 
 def visualize_interpolant_flow(
-    interpolant: OptimalInterpolant,
+    interpolant: ModalInterpolant,
     key: jax.Array,
     x_span: tuple[float, float],
     bin_width: Float = 0.01,
@@ -310,7 +315,7 @@ def visualize_interpolant_flow(
     x_grid = jnp.linspace(
         x_span[0], x_span[1], int((x_span[1] - x_span[0]) / bin_width)
     )
-    t_grid = interpolant.t
+    t_grid = interpolant.default_tgrid()
 
     # Plot velocity field
     plot_velocity_field(velocity_field, x_grid, t_grid)
@@ -363,14 +368,15 @@ if __name__ == "__main__":
         ]
     ).T
 
-    test_interpolant = OptimalInterpolant(
+    test_interpolant = modal_interpolant_factory(
+        "time interpolated",
         t=jnp.linspace(0, 1, 100),  # 100 time points
         Z=simple_stochastic_basis,
+        psi=psi,
+        psi_dot=psi_dot
     )
-    test_interpolant = test_interpolant.with_psi(psi=psi)
-    test_interpolant = test_interpolant.with_psi_dot(psi_dot=psi_dot)
 
-    t_grid_test = test_interpolant.t
+    t_grid_test = test_interpolant.default_tgrid()
 
     # %% [markdown]
     # ## Test 1: Velocity Field Computation
@@ -405,7 +411,7 @@ if __name__ == "__main__":
     print(
         f"Expected shape: ({int((x_span_test[1] - x_span_test[0]) / bin_width_test)}, {len(t_grid_test)})"
     )
-    print(f"\nVelocity field stats (Gaussian):")
+    print( "\nVelocity field stats (Gaussian):")
     print(f"  Mean: {jnp.mean(velocity_field_gauss):.4f}")
     print(f"  Std: {jnp.std(velocity_field_gauss):.4f}")
     print(f"  Min: {jnp.min(velocity_field_gauss):.4f}")
@@ -429,34 +435,34 @@ if __name__ == "__main__":
     x_grid_test = jnp.arange(x_span_test[0], x_span_test[1], bin_width_test)
 
     # Test interpolation at grid points (should match original values)
-    t_mid = t_grid_test[len(t_grid_test) // 2]
-    x_mid = x_grid_test[len(x_grid_test) // 2]
+    t_mid = t_grid_test[len(t_grid_test) // 2].item()
+    x_mid = x_grid_test[len(x_grid_test) // 2].item()
 
     v_interp_grid = interpolate_velocity_field(
         t_mid, x_mid, t_grid_test, x_grid_test, velocity_field_gauss.T
     )
     v_original = velocity_field_gauss[len(x_grid_test) // 2, len(t_grid_test) // 2]
 
-    print(f"Interpolation at grid point:")
+    print( "Interpolation at grid point:")
     print(f"  Original value: {v_original:.6f}")
     print(f"  Interpolated value: {v_interp_grid:.6f}")
     print(f"  Difference: {abs(v_interp_grid - v_original):.2e}")
 
     # Test interpolation between grid points
-    t_between = (t_grid_test[5] + t_grid_test[6]) / 2
-    x_between = (x_grid_test[10] + x_grid_test[11]) / 2
+    t_between = ((t_grid_test[5] + t_grid_test[6]) / 2).item()
+    x_between = ((x_grid_test[10] + x_grid_test[11]) / 2).item()
 
     v_interp_between = interpolate_velocity_field(
         t_between, x_between, t_grid_test, x_grid_test, velocity_field_gauss.T
     )
 
-    print(f"\nInterpolation between grid points:")
+    print( "\nInterpolation between grid points:")
     print(f"  Interpolated value: {v_interp_between:.6f}")
-    print(f"  (Should be between neighboring values)")
+    print( "  (Should be between neighboring values)")
 
     # Test boundary handling
     v_boundary = interpolate_velocity_field(
-        t_grid_test[0], x_grid_test[0], t_grid_test, x_grid_test, velocity_field_gauss.T
+        t_grid_test[0].item(), x_grid_test[0].item(), t_grid_test, x_grid_test, velocity_field_gauss.T
     )
     print(f"\nBoundary interpolation: {v_boundary:.6f}")
 
@@ -479,7 +485,7 @@ if __name__ == "__main__":
 
     print(f"Particle trajectory shape: {trajectory.shape}")
     print(f"Expected shape: ({len(t_grid_test)},)")
-    print(f"\nTrajectory stats:")
+    print( "\nTrajectory stats:")
     print(f"  Initial position: {trajectory[0]:.4f}")
     print(f"  Final position: {trajectory[-1]:.4f}")
     print(f"  Position change: {trajectory[-1] - trajectory[0]:.4f}")
@@ -512,7 +518,7 @@ if __name__ == "__main__":
     trajectories_test = []
     for i in range(N_particles):
         traj = simulate_particle_trajectory(
-            X0_samples_test[i], t_grid_test, x_grid_test, velocity_field_gauss.T
+            X0_samples_test[i].item(), t_grid_test, x_grid_test, velocity_field_gauss.T
         )
         trajectories_test.append(traj)
 
@@ -614,15 +620,15 @@ if __name__ == "__main__":
     # Test interpolation at boundaries
     try:
         v_edge1 = interpolate_velocity_field(
-            t_grid_test[0],
-            x_grid_test[0],
+            t_grid_test[0].item(),
+            x_grid_test[0].item(),
             t_grid_test,
             x_grid_test,
             velocity_field_gauss.T,
         )
         v_edge2 = interpolate_velocity_field(
-            t_grid_test[-1],
-            x_grid_test[-1],
+            t_grid_test[-1].item(),
+            x_grid_test[-1].item(),
             t_grid_test,
             x_grid_test,
             velocity_field_gauss.T,

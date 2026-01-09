@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
-from .basis import SplineBasis, AbstractLinearBasis
 from .convolution import triple_circ_convolve_freq
 
 PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
@@ -14,9 +13,7 @@ __all__ = [
     "OptimalInterpBVP_ODE_RHS",
     "OptimalInterpBVP_DAE_RHS",
     "OptimalInterpBVP_DAE_LHS",
-    "create_spline_residual",
-    "create_collocated_basis_residual",
-    "pad_coeffs"
+    "OptimalInterpPDEResidual"
 ]
 
 
@@ -164,121 +161,8 @@ def OptimalInterpPDEResidualPt(
     return rhs - lhs
 
 
-__OptimalInterpPDEResidual_vmap = jax.vmap(
+OptimalInterpPDEResidual = jax.vmap(
     OptimalInterpPDEResidualPt, in_axes=(0, 0, 0, None))
-
-
-def create_spline_residual(psi: SplineBasis, phi: MomentGeneratingPhi):
-    """
-    Create a residual function for a given spline basis
-
-    :param psi: Basis of spline functions
-    :type psi: SplineBasis
-    :param phi: Moment generating function
-    :type phi: MomentGeneratingPhi
-    """
-    evals, basis_diff1, basis_diff2 = psi.collocated_basis_transform()
-
-    def spline_residual(coeffs_psi, _):
-        # Assume a basis with T+2 knots (0,...,T+1), where t_0 = 0 and t_{T+1} = 1.
-        # Each col of coeffs_psi represents the coefficients for a given output.
-        # Each row of coeffs_psi represents a given spline function, i.e., col k represents spline centered at k/(T+1).
-        # dt_scale is the derivative operator on the coeffs_psi for this basis evaluated at the knots.
-        # dt_shift is the shift of the derivative operator to ensure boundary conditions are satisfied.
-        coeffs_psi_full = jnp.pad(
-            coeffs_psi, ((1, 1), (1, 1)), mode='constant'
-        ).at[[0, -1], [0, -1]].set(1.)
-        psi = coeffs_psi_full  # Note that the splines are just the coeffs at collocation points
-        psi_dot = basis_diff1 @ coeffs_psi_full
-        psi_dot_dot = basis_diff2 @ coeffs_psi_full
-        residual = __OptimalInterpPDEResidual_vmap(
-            psi, psi_dot, psi_dot_dot, phi
-        )
-        return jnp.abs(residual)
-    return jax.jit(spline_residual)
-
-
-def pad_coeffs(coeffs: Float[Array, "p-2 alpha"], psi: AbstractLinearBasis, fixed_orders: tuple[int, int]):
-    """
-    Pad the coefficients for a linear basis to ensure function satisfies boundary conditions
-
-    :param coeffs: Non-fixed coefficients
-    :type coeffs: Float[Array, "p-2 alpha"]
-    :param psi: Basis for coefficients
-    :type psi: AbstractLinearBasis
-    :param fixed_orders: Indices of coefficients are constrained
-    :type fixed_orders: tuple[int, int]
-    """
-    N_terms = coeffs.shape[1]
-    basis_eval = psi.evaluate_basis(jnp.zeros(2).at[1].set(1.))
-    order0, order1 = fixed_orders
-    bc_scale = basis_eval[[0, 0, -1, -1], [order0, order1, order0, order1]].reshape(2,2)
-    inv_bc_scale = jnp.linalg.inv(bc_scale)
-    bc_shift = jnp.zeros((2, N_terms)).at[[0, 1], [0, -1]].set(1.)
-    first_coeffs = inv_bc_scale @ (
-        bc_shift - (basis_eval[:, 2:] @ coeffs)
-    )
-    return jnp.concat((first_coeffs, coeffs))
-
-
-def create_collocated_basis_residual(
-        t_grid: Float[Array, " T"],
-        N_terms: int, psi: AbstractLinearBasis,
-        phi: MomentGeneratingPhi,
-        fixed_orders: tuple[int, int],
-        wts: float | Float[Array, " T"] = 1.
-    ):
-    """
-    Create a residual using collocation. Assume that the first two elements of the linear basis are fixed to ensure boundary conditions.
-
-    :param t_grid: Grid of points to collocate
-    :type t_grid: Float[Array, "T"]
-    :param N_terms: Number of expansion terms
-    :type N_terms: int
-    :param psi: Basis for expansion terms
-    :type psi: AbstractLinearBasis
-    :param phi: Moment generation function
-    :type phi: MomentGeneratingPhi
-    :param fixed_orders: Indices of coefficients constrained by boundary conditions
-    :type fixed_orders: tuple[int, int]
-    :param wts: Optional weights for collocations
-    :type wts: float | Float[Array, " T"]
-    """
-    t_grid = jnp.sort(t_grid)
-    assert t_grid[0] == 0. and t_grid[-1] == 1.  # Ensure grid is valid
-    # Evaluate basis
-    basis_eval, basis_diff1, basis_diff2 = psi.evaluate_basis_diff2(t_grid)
-    # Get the zero and first order basis at times t=0, t=1
-    order0, order1 = fixed_orders
-    assert order0 < order1
-    bc_scale = basis_eval[[0, 0, -1, -1], [order0, order1, order0, order1]].reshape(2,2)
-    # Set the boundary conditions
-    inv_bc_scale = jnp.linalg.inv(bc_scale)
-    bc_shift = jnp.zeros((2, N_terms)).at[[0, 1], [0, -1]].set(1.)
-    wts = jnp.reshape(wts, (-1,1))
-
-    def basis_residual(coeffs_psi: Float[Array, "P alpha"], _):
-        # Get first two basis elements using boundary conditions
-        bdry_basis = basis_eval[jnp.array([0,-1])]
-        bdry_transform = jnp.concat(
-            (bdry_basis[:,:order0], bdry_basis[:,order0+1:order1], bdry_basis[:,order1+1:]),
-            axis=1
-        )
-        first_coeffs = inv_bc_scale @ (
-            bc_shift - (bdry_transform @ coeffs_psi)
-        )
-        # Evaluate the basis and derivatives on full coefficient set
-        full_coeffs_psi = jnp.concat((first_coeffs, coeffs_psi))
-        psi = basis_eval @ full_coeffs_psi
-        psi_diff1 = basis_diff1 @ full_coeffs_psi
-        psi_diff2 = basis_diff2 @ full_coeffs_psi
-        # Evaluate the residual
-        residual = __OptimalInterpPDEResidual_vmap(
-            psi, psi_diff1, psi_diff2, phi
-        )
-        return wts * jnp.abs(residual)
-
-    return jax.jit(basis_residual)
 
 
 def OptimalInterpBVP_ODE_RHS(

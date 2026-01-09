@@ -7,9 +7,9 @@ import optimalinterp as oi
 import jax
 from typing import NamedTuple
 
-__all__ = ["OptimalInterpBVPSolution", "solve"]
+__all__ = ["OptimalInterpBVPShootingSolution", "solve"]
 
-class OptimalInterpBVPSolution(NamedTuple):
+class OptimalInterpBVPShootingSolution(NamedTuple):
     """Solution container for optimal interpolation BVP.
 
     Attributes:
@@ -61,10 +61,11 @@ def shoot_once(psi_dot_0: Float[Array, " N"], *args, **solver_kwargs) -> tuple[F
     )
     sol_ys = sol.ys
     sol_result = sol.result
+    assert sol_ys is not None
     return jax.lax.cond(
-        sol_ys is not None and sol_result == diffrax.RESULTS.successful,
+        sol_result == diffrax.RESULTS.successful,
         lambda: (sol_ys, sol_result),
-        lambda: (jnp.inf * y0.reshape(1,-1), sol_result),
+        lambda: (jnp.inf * sol_ys, sol_result),
     )
 
 
@@ -88,12 +89,12 @@ def solve(
     rtol: float = 1e-8,
     atol: float = 1e-8,
     max_solver_steps: int = 5000,
-    N_optimizer_steps: int = 1000,
+    max_optimizer_steps: int = 1000,
     verbose: bool = True,
     plot_solution: bool = True,
     return_real_part: bool = True,
     solver: diffrax.AbstractSolver = diffrax.Kvaerno5(),
-) -> OptimalInterpBVPSolution:
+) -> OptimalInterpBVPShootingSolution:
 
     term = diffrax.ODETerm(rhs)  # Create Diffrax term
 
@@ -136,7 +137,7 @@ def solve(
         residual_fcn,
         optimizer,
         initial_psi_dot_0,
-        max_steps=N_optimizer_steps,
+        max_steps=max_optimizer_steps,
         throw=False,
     )
 
@@ -175,7 +176,7 @@ def solve(
         plt.show()
     optimization_success = (opt_sol.result == optx.RESULTS.successful).item()
     solver_success = (ode_result == diffrax.RESULTS.successful).item()
-    return OptimalInterpBVPSolution(
+    return OptimalInterpBVPShootingSolution(
         t=saveat_t,
         psi=psi_t,
         psi_dot=psi_dot_t,

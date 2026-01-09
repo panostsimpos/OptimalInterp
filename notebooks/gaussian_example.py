@@ -6,11 +6,8 @@
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import optimalinterp as oi
 from scipy.stats import gaussian_kde
-from optimalinterp.stochastic_basis import GaussianBasis
-from optimalinterp.optimal_interpolant import OptimalInterpolant, compute_optimal_psi
-from optimalinterp.visualization import visualize_interpolant_flow
+import optimalinterp as oi
 
 # %% [markdown]
 # ## 1. Problem Setup
@@ -26,10 +23,10 @@ from optimalinterp.visualization import visualize_interpolant_flow
 n_samples = 1000
 
 key = jax.random.PRNGKey(0)
-stochastic_basis = GaussianBasis(
+stochastic_basis = oi.GaussianBasis(
     mean=2.0,
     std_dev=4.0,
-    N_basis=5,
+    N_basis=4,
     bridge_type="gaussian_convolution",
 )
 samples = stochastic_basis.sample(N_samples=1000, key=key)
@@ -82,11 +79,11 @@ plt.show()
 # coefficients $t \mapsto \psi(t)$ have not yet been computed.
 
 # However, before we build an optimal interpolant we build a *standard stochastic interpolant*
-# to give ourselves a point of comparison. That is, we instantiate the stochasitc interpolant
+# to give ourselves a point of comparison. That is, we instantiate the stochastic interpolant
 # $$ X_t = (1 - t) X_0 + t X_1 $$
-# %%
 
-simple_stochastic_basis = GaussianBasis(
+# %%
+simple_stochastic_basis = oi.GaussianBasis(
     mean=10.0,
     std_dev=2.0,
     N_basis=2,
@@ -100,21 +97,24 @@ simple_psi = jnp.array(
     ]
 ).T
 
-standard_interpolant = OptimalInterpolant(
+standard_interpolant = oi.modal_interpolant_factory(
+    "time interpolated",
     t=jnp.linspace(0, 1, 100),  # 100 time points
     Z=simple_stochastic_basis,
-).with_psi(psi=simple_psi)
+    psi=simple_psi,
+    psi_dot=jnp.ones((100,2))
+)
 
 # Plot sample paths of the standard interpolant
 n_paths = 50
 t_eval = jnp.linspace(0, 1, 100)
 key = jax.random.PRNGKey(0)
-sample_paths = standard_interpolant(
-    N_samples=n_paths, key=key, t_eval=t_eval
-)  # Shape: (n_paths, n_times)
+
+# Shape: (n_paths, n_times)
+sample_paths = standard_interpolant(key, n_paths)
 
 fig, ax = plt.subplots(figsize=(10, 6))
-t_vals = standard_interpolant.t
+t_vals = standard_interpolant.default_tgrid()
 
 for i in range(n_paths):
     ax.plot(t_vals, sample_paths[i, :], alpha=0.5, linewidth=1)
@@ -126,26 +126,21 @@ ax.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.show()
 
-# %%
-
-interpolant = OptimalInterpolant(
-    t=jnp.linspace(0, 1, 100),  # 100 time points
-    Z=stochastic_basis,
-)
-
 # %% [markdown]
 # ## 2. Compute Optimal Coefficients
 # Next, we compute the optimal coefficients $t \mapsto \psi(t)$ for the optimal interpolant.
 # This is done by calling the `compute_optimal_psi` method.
+
 # %%
-optimal_interpolant = compute_optimal_psi(interpolant)
-# %%
+optimal_interpolant = oi.optimal_interpolant.compute_optimal_psi_shooting(stochastic_basis, allow_failure=True, max_optimizer_steps=1000)
+
 # %% [markdown]
 # ## 3. Visualize Sample Paths and mean velocity.
 # We start by plotting the sample paths of the optimal interpolant.
+
 # %%
 n_paths = 50
-t_eval = jnp.linspace(0, 1, 100)
+t_eval = jnp.linspace(0, 1, 103)
 key = jax.random.PRNGKey(0)
 sample_paths = optimal_interpolant(
     N_samples=n_paths, key=key, t_eval=t_eval
@@ -165,13 +160,15 @@ plt.show()
 # %% [markdown]
 # Finally, we can compute and visualize the mean velocity field induced by the optimal interpolant.
 # We use the `interpolate_velocity_field` utility function for this purpose.
-# %%
 
+# %%
 key = jax.random.PRNGKey(42)
 x_span = (-10.0, 15.0)
 
-visualize_interpolant_flow(
+oi.visualization.visualize_interpolant_flow(
     interpolant=optimal_interpolant,
     key=key,
     x_span=x_span,
 )
+
+# %%
