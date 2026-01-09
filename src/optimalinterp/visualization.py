@@ -237,7 +237,7 @@ def plot_flow_field(
     """
 
     # Sample initial positions
-    X0_samples = interpolant.Z.sample(N_samples=N_flow_samples, key=key)[:, 0]
+    X0_samples = interpolant(key, N_samples=N_flow_samples)[:, 0]  # (N_flow_samples,)
 
     # Simulate all trajectories
     trajectories = []
