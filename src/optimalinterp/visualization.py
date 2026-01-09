@@ -16,11 +16,11 @@ from optimalinterp.optimal_interpolant import OptimalInterpolant
 def compute_velocity(
     interpolant: OptimalInterpolant,
     key: jax.Array,
-    x_span: tuple[float, float],
+    x_grid: Float[Array, "x_grid"],
     bin_width: Float,
     kernel_type: str = "gaussian",
     N_samples: int = 1000,
-) -> tuple[Float[Array, "t_grid x_grid"], Float[Array, "x_grid"]]:
+) -> Float[Array, "t_grid x_grid"]:
     """
     Compute v(x,t) = E[dot{X}_t | X_t = x] using binning at a single time t.
     Given an interopolant X_t = Σ_{α=1}^N Z_α ψ_α(t) with time derivative
@@ -29,12 +29,12 @@ def compute_velocity(
 
     :param interpolant: An instance of OptimalInterpolant.
     :param key: JAX PRNG key.
-    :param x_span: Tuple (x_min, x_max) defining grid range.
+    :param x_grid: Grid points in x.
     :param bin_width: Width of bins for conditioning.
     :param N_samples: Number of samples of Z_α to use.
 
     Returns:
-    :return: Tuple of (velocity_field, x_grid) where velocity_field has shape (t_grid, x_grid).
+    :return: velocity_field where velocity_field has shape (t_grid, x_grid).
     """
     # Compute X_t and dot{X}_t for all samples
     Z_samples = interpolant.Z.sample(
@@ -67,17 +67,13 @@ def compute_velocity(
         # Avoid division by zero
         return jnp.where(weight_total > 1e-10, weighted_sum / weight_total, 0.0)
 
-    # Use consistent grid construction
-    n_points = int((x_span[1] - x_span[0]) / bin_width)
-    x_grid = jnp.linspace(x_span[0], x_span[1], n_points)
-    t_indices = jnp.arange(len(interpolant.t))
-
     # Shape (t_grid, x_grid)
+    t_indices = jnp.arange(len(interpolant.t))
     velocity_field = jax.vmap(
         lambda t_idx: jax.vmap(lambda x: velocity_at_x_and_t(x, t_idx))(x_grid)
     )(t_indices)
 
-    return velocity_field, x_grid  # Shape (t_grid, x_grid), (x_grid,)
+    return velocity_field
 
 
 def plot_velocity_field(
@@ -237,7 +233,9 @@ def plot_flow_field(
     """
 
     # Sample initial positions
-    X0_samples = interpolant(key, N_samples=N_flow_samples)[:, 0]  # (N_flow_samples,)
+    X0_samples = interpolant(key, N_samples=N_flow_samples, t_eval=t_grid)[
+        :, 0
+    ]  # (N_flow_samples,)
 
     # Simulate all trajectories
     trajectories = []
@@ -293,17 +291,17 @@ def plot_flow_field(
 def visualize_interpolant_flow(
     interpolant: OptimalInterpolant,
     key: jax.Array,
-    x_span: tuple[float, float],
+    x_grid: Float[Array, "x_grid"],
     bin_width: Float = 0.01,
     kernel_type: str = "gaussian",
     N_velocity_samples: int = 1000,
     N_flow_samples: int = 20,
 ):
     # Compute velocity field - now returns both velocity_field and x_grid
-    velocity_field, x_grid = compute_velocity(
+    velocity_field = compute_velocity(
         interpolant,
         key,
-        x_span,
+        x_grid,
         bin_width,
         kernel_type,
         N_samples=N_velocity_samples,
@@ -396,25 +394,25 @@ if __name__ == "__main__":
     # ## Test 1: Velocity Field Computation
     # %%
     key_test = jax.random.PRNGKey(42)
-    x_span_test = (-15.0, 15.0)
+    x_grid_test = jnp.linspace(-15, 15, 1000)
     bin_width_test = 0.01
     N_velocity_samples_test = 500
 
     # Compute velocity field with Gaussian kernel
-    velocity_field_gauss, _ = compute_velocity(
+    velocity_field_gauss = compute_velocity(
         test_interpolant,
         key_test,
-        x_span_test,
+        x_grid_test,
         bin_width_test,
         kernel_type="gaussian",
         N_samples=N_velocity_samples_test,
     )
 
     # Compute velocity field with square kernel
-    velocity_field_square, _ = compute_velocity(
+    velocity_field_square = compute_velocity(
         test_interpolant,
         key_test,
-        x_span_test,
+        x_grid_test,
         bin_width_test,
         kernel_type="square",
         N_samples=N_velocity_samples_test,
@@ -423,7 +421,7 @@ if __name__ == "__main__":
     print(f"Velocity field (Gaussian) shape: {velocity_field_gauss.shape}")
     print(f"Velocity field (Square) shape: {velocity_field_square.shape}")
     print(
-        f"Expected shape: ({len(t_grid_test)}, {int((x_span_test[1] - x_span_test[0]) / bin_width_test)})"
+        f"Expected shape: ({len(t_grid_test)}, {int((x_grid_test[1] - x_grid_test[0]) / bin_width_test)})"
     )
     print(f"\nVelocity field stats (Gaussian):")
     print(f"  Mean: {jnp.mean(velocity_field_gauss):.4f}")
@@ -446,8 +444,6 @@ if __name__ == "__main__":
     # Test bilinear interpolation of velocity field at arbitrary points.
 
     # %%
-    x_grid_test = jnp.arange(x_span_test[0], x_span_test[1], bin_width_test)
-
     # Test interpolation at grid points (should match original values)
     t_mid = t_grid_test[len(t_grid_test) // 2]
     x_mid = x_grid_test[len(x_grid_test) // 2]
@@ -595,7 +591,7 @@ if __name__ == "__main__":
         visualize_interpolant_flow(
             test_interpolant,
             key_test,
-            x_span=(-15.0, 15.0),
+            x_grid=x_grid_test,
             bin_width=0.01,
             kernel_type="gaussian",
             N_velocity_samples=1000,

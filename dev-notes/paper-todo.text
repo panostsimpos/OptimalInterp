@@ -1,0 +1,27 @@
+
+
+
+January 9th, 2026
+
+========================
+Remaining work for paper
+=========================
+
+Numerics
+-----------
+
+1. Over-constrain PDE by relaxing square mass matrix assumption.
+
+2.  Plots of straight line flows for
+    A. Gaussian case (wrapped) using modal decomposition (d=1)
+    B1. Gaussian case (wrapped) using modal decomposition (d=2)
+    B2. Funky distribution using modal decomposition (d=1)
+
+Theory
+------
+
+3. Prove ODE system is well posed, i.e., existence of solution (and possibly uniqueness).
+
+4. Provide explanation for the choice of (Z_alpha)_alpha.
+
+
