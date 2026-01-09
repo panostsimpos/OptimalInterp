@@ -168,10 +168,15 @@ plt.show()
 # %%
 
 key = jax.random.PRNGKey(42)
-x_span = (-10.0, 15.0)
-
+x_span = (-10.0, 10.0)
 visualize_interpolant_flow(
-    interpolant=optimal_interpolant,
-    key=key,
+    optimal_interpolant,
+    key,
     x_span=x_span,
+    bin_width=0.01,
+    kernel_type="gaussian",
+    N_velocity_samples=1000,
+    N_flow_samples=50,
 )
+
+# %%
