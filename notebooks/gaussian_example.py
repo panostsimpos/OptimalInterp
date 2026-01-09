@@ -141,9 +141,8 @@ optimal_interpolant = compute_optimal_psi(interpolant)
 # %%
 # %% [markdown]
 # ## 3. Visualize Sample Paths and mean velocity.
-# We start by plotting the sample paths.
-
-# Plot sample paths of the standard interpolant
+# We start by plotting the sample paths of the optimal interpolant.
+# %%
 n_paths = 50
 t_eval = jnp.linspace(0, 1, 100)
 key = jax.random.PRNGKey(0)
