@@ -10,6 +10,7 @@ import optimalinterp as oi
 from scipy.stats import gaussian_kde
 from optimalinterp.stochastic_basis import GaussianBasis
 from optimalinterp.optimal_interpolant import OptimalInterpolant, compute_optimal_psi
+from optimalinterp.visualization import visualize_interpolant_flow
 
 # %% [markdown]
 # ## 1. Problem Setup
@@ -161,4 +162,16 @@ ax.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.show()
 
+# %% [markdown]
+# Finally, we can compute and visualize the mean velocity field induced by the optimal interpolant.
+# We use the `interpolate_velocity_field` utility function for this purpose.
 # %%
+
+key = jax.random.PRNGKey(42)
+x_span = (-10.0, 15.0)
+
+visualize_interpolant_flow(
+    interpolant=optimal_interpolant,
+    key=key,
+    x_span=x_span,
+)
