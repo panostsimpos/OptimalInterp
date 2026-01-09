@@ -292,7 +292,7 @@ def visualize_interpolant_flow(
     interpolant: OptimalInterpolant,
     key: jax.Array,
     x_span: tuple[float, float],
-    bin_width: Float = 0.1,
+    bin_width: Float = 0.01,
     kernel_type: str = "gaussian",
     N_velocity_samples: int = 1000,
     N_flow_samples: int = 20,
@@ -333,11 +333,7 @@ def visualize_interpolant_flow(
 
 if __name__ == "__main__":
     # Write some tests
-    import jax
-    import jax.numpy as jnp
-    from optimalinterp.optimal_interpolant import OptimalInterpolant
-    from optimalinterp.moment_generator import GaussianPhi1D
-    from optimalinterp.basis import SplineBasis
+    from optimalinterp.stochastic_basis import GaussianBasis
 
     # Enable 64-bit precision for accurate tests
     jax.config.update("jax_enable_x64", True)
@@ -345,38 +341,43 @@ if __name__ == "__main__":
     # %% [markdown]
     # # Visualization Module Tests
     # %%
-    # Test parameters
-    N_basis = 5
-    N_times = 20
-    t_span = (0.0, 1.0)
 
-    # Create time grid
-    t_grid_test = jnp.linspace(t_span[0], t_span[1], N_times)
+    simple_stochastic_basis = GaussianBasis(
+        mean=10.0,
+        std_dev=2.0,
+        N_basis=2,
+        bridge_type="gaussian_convolution",
+    )
 
-    # Create simple test coefficients: linear interpolation from -1 to 1
-    psi_test = jnp.outer(jnp.linspace(-1.0, 1.0, N_times), jnp.ones(N_basis))
-    psi_dot_test = jnp.ones((N_times, N_basis)) * 2.0 / (t_span[1] - t_span[0])
+    psi = jnp.array(
+        [
+            jnp.linspace(1, 0, 100),
+            jnp.linspace(0, 1, 100),
+        ]
+    ).T
 
-    # Create mock Z distribution (standard normal)
-    class MockZ:
-        def sample(self, N_samples, key):
-            return jax.random.normal(key, (N_samples, N_basis))
+    psi_dot = jnp.array(
+        [
+            -1 * jnp.ones(psi.shape[0]),
+            +1 * jnp.ones(psi.shape[0]),
+        ]
+    ).T
 
-    # Create test interpolant
     test_interpolant = OptimalInterpolant(
-        t=t_grid_test, psi=psi_test, psi_dot=psi_dot_test, Z=MockZ()
+        t=jnp.linspace(0, 1, 100),  # 100 time points
+        Z=simple_stochastic_basis,
     )
+    test_interpolant = test_interpolant.with_psi(psi=psi)
+    test_interpolant = test_interpolant.with_psi_dot(psi_dot=psi_dot)
 
-    print(
-        f"Test interpolant created with {N_basis} basis functions and {N_times} time points"
-    )
-    print(f"psi shape: {psi_test.shape}")
-    print(f"psi_dot shape: {psi_dot_test.shape}")
+    t_grid_test = test_interpolant.t
 
+    # %% [markdown]
+    # ## Test 1: Velocity Field Computation
     # %%
     key_test = jax.random.PRNGKey(42)
     x_span_test = (-5.0, 5.0)
-    bin_width_test = 0.2
+    bin_width_test = 0.01
     N_velocity_samples_test = 500
 
     # Compute velocity field with Gaussian kernel
@@ -402,7 +403,7 @@ if __name__ == "__main__":
     print(f"Velocity field (Gaussian) shape: {velocity_field_gauss.shape}")
     print(f"Velocity field (Square) shape: {velocity_field_square.shape}")
     print(
-        f"Expected shape: ({int((x_span_test[1] - x_span_test[0]) / bin_width_test)}, {N_times})"
+        f"Expected shape: ({int((x_span_test[1] - x_span_test[0]) / bin_width_test)}, {len(t_grid_test)})"
     )
     print(f"\nVelocity field stats (Gaussian):")
     print(f"  Mean: {jnp.mean(velocity_field_gauss):.4f}")
@@ -428,13 +429,13 @@ if __name__ == "__main__":
     x_grid_test = jnp.arange(x_span_test[0], x_span_test[1], bin_width_test)
 
     # Test interpolation at grid points (should match original values)
-    t_mid = t_grid_test[N_times // 2]
+    t_mid = t_grid_test[len(t_grid_test) // 2]
     x_mid = x_grid_test[len(x_grid_test) // 2]
 
     v_interp_grid = interpolate_velocity_field(
         t_mid, x_mid, t_grid_test, x_grid_test, velocity_field_gauss.T
     )
-    v_original = velocity_field_gauss[len(x_grid_test) // 2, N_times // 2]
+    v_original = velocity_field_gauss[len(x_grid_test) // 2, len(t_grid_test) // 2]
 
     print(f"Interpolation at grid point:")
     print(f"  Original value: {v_original:.6f}")
