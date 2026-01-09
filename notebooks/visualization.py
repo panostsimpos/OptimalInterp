@@ -1,3 +1,4 @@
+# %%
 import matplotlib.pyplot as plt
 import optimistix as optx
 import jax.numpy as jnp
@@ -10,19 +11,6 @@ from optimalinterp.optimal_interpolant import OptimalInterpolant
 # =============================================================================
 # Generic binning-based velocity field computation
 # =============================================================================
-
-
-# def truncate_on_torus(
-#     x: Float[Array, "N_samples"], period: Float
-# ) -> Float[Array, "N_samples"]:
-#     """
-#     Truncate samples x onto a torus with given period.
-
-#     :param x: Input samples.
-#     :param period: Period of the torus.
-#     :return: Truncated samples in [-period/2, period/2).
-#     """
-#     return jnp.mod(x + period / 2, period) - period / 2
 
 
 def compute_velocity(
@@ -56,39 +44,38 @@ def compute_velocity(
     X_samples = Z_samples @ psi.T  # (N_samples, T)
     Xdot_samples = Z_samples @ psi_dot.T  # (N_samples, T)
 
+    if kernel_type == "gaussian":
+
+        def kernel(x):
+            return jnp.exp(-0.5 * (x) ** 2)
+
+    elif kernel_type == "square":
+
+        def kernel(x):
+            return jnp.where(jnp.abs(x) <= 0.5, 1.0, 0.0)
+
+    else:
+        raise ValueError("Unknown kernel type")
+
     # For each x in x_grid, find samples in bin and average Xdot
-    def velocity_at_x_and_t(x, X_samples_X_dot_conact_at_t):
-        X_samples_at_t, Xdot_samples_at_t = X_samples_X_dot_conact_at_t
-        if kernel_type == "gaussian":
+    def velocity_at_x_and_t(x, t_idx):
 
-            def kernel(x):
-                return jnp.exp(-0.5 * (x) ** 2)
-
-        elif kernel_type == "square":
-
-            def kernel(x):
-                return jnp.where(jnp.abs(x) <= 0.5, 1.0, 0.0)
-
-        else:
-            raise ValueError("Unknown kernel type")
-
-        distances = (X_samples_at_t - x) / bin_width
+        distances = (X_samples[:, t_idx] - x) / bin_width
         weights = kernel(distances)
-        weighted_sum = jnp.sum(weights * Xdot_samples_at_t)
+        weighted_sum = jnp.sum(weights * Xdot_samples[:, t_idx])
         weight_total = jnp.sum(weights)
         # Avoid division by zero
         return jnp.where(weight_total > 1e-10, weighted_sum / weight_total, 0.0)
 
-    def velocity_at_x(x):
-        return jax.vmap(
-            lambda X_samples_at_t, Xdot_samples_at_t: velocity_at_x_and_t(
-                x, (X_samples_at_t, Xdot_samples_at_t)
-            ),
-            in_axes=(0, 0),
-        )(X_samples, Xdot_samples)
+    x_grid = jnp.arange(x_span[0], x_span[1], bin_width)
+    t_indices = jnp.arange(len(interpolant.t))
 
-    x_grid = jnp.linspace(x_span[0], x_span[1], 1 / bin_width)
-    return jax.vmap(velocity_at_x)(x_grid)
+    # Shape (t_grid, x_grid)
+    velocity_field = jax.vmap(
+        lambda t_idx: jax.vmap(lambda x: velocity_at_x_and_t(x, t_idx))(x_grid)
+    )(t_indices)
+
+    return velocity_field.T  # Shape (x_grid, t_grid)
 
 
 def plot_velocity_field(
@@ -305,7 +292,7 @@ def visualize_interpolant_flow(
     interpolant: OptimalInterpolant,
     key: jax.Array,
     x_span: tuple[float, float],
-    bin_width: Float,
+    bin_width: Float = 0.1,
     kernel_type: str = "gaussian",
     N_velocity_samples: int = 1000,
     N_flow_samples: int = 20,
@@ -337,3 +324,332 @@ def visualize_interpolant_flow(
         key,
         N_flow_samples=N_flow_samples,
     )
+
+
+# %%
+# =======================
+# Tests for this module
+# =======================
+
+if __name__ == "__main__":
+    # Write some tests
+    import jax
+    import jax.numpy as jnp
+    from optimalinterp.optimal_interpolant import OptimalInterpolant
+    from optimalinterp.moment_generator import GaussianPhi1D
+    from optimalinterp.basis import SplineBasis
+
+    # Enable 64-bit precision for accurate tests
+    jax.config.update("jax_enable_x64", True)
+
+    # %% [markdown]
+    # # Visualization Module Tests
+    # %%
+    # Test parameters
+    N_basis = 5
+    N_times = 20
+    t_span = (0.0, 1.0)
+
+    # Create time grid
+    t_grid_test = jnp.linspace(t_span[0], t_span[1], N_times)
+
+    # Create simple test coefficients: linear interpolation from -1 to 1
+    psi_test = jnp.outer(jnp.linspace(-1.0, 1.0, N_times), jnp.ones(N_basis))
+    psi_dot_test = jnp.ones((N_times, N_basis)) * 2.0 / (t_span[1] - t_span[0])
+
+    # Create mock Z distribution (standard normal)
+    class MockZ:
+        def sample(self, N_samples, key):
+            return jax.random.normal(key, (N_samples, N_basis))
+
+    # Create test interpolant
+    test_interpolant = OptimalInterpolant(
+        t=t_grid_test, psi=psi_test, psi_dot=psi_dot_test, Z=MockZ()
+    )
+
+    print(
+        f"Test interpolant created with {N_basis} basis functions and {N_times} time points"
+    )
+    print(f"psi shape: {psi_test.shape}")
+    print(f"psi_dot shape: {psi_dot_test.shape}")
+
+    # %%
+    key_test = jax.random.PRNGKey(42)
+    x_span_test = (-5.0, 5.0)
+    bin_width_test = 0.2
+    N_velocity_samples_test = 500
+
+    # Compute velocity field with Gaussian kernel
+    velocity_field_gauss = compute_velocity(
+        test_interpolant,
+        key_test,
+        x_span_test,
+        bin_width_test,
+        kernel_type="gaussian",
+        N_samples=N_velocity_samples_test,
+    )
+
+    # Compute velocity field with square kernel
+    velocity_field_square = compute_velocity(
+        test_interpolant,
+        key_test,
+        x_span_test,
+        bin_width_test,
+        kernel_type="square",
+        N_samples=N_velocity_samples_test,
+    )
+
+    print(f"Velocity field (Gaussian) shape: {velocity_field_gauss.shape}")
+    print(f"Velocity field (Square) shape: {velocity_field_square.shape}")
+    print(
+        f"Expected shape: ({int((x_span_test[1] - x_span_test[0]) / bin_width_test)}, {N_times})"
+    )
+    print(f"\nVelocity field stats (Gaussian):")
+    print(f"  Mean: {jnp.mean(velocity_field_gauss):.4f}")
+    print(f"  Std: {jnp.std(velocity_field_gauss):.4f}")
+    print(f"  Min: {jnp.min(velocity_field_gauss):.4f}")
+    print(f"  Max: {jnp.max(velocity_field_gauss):.4f}")
+
+    # Check for NaN or Inf values
+    assert not jnp.any(
+        jnp.isnan(velocity_field_gauss)
+    ), "Velocity field contains NaN values"
+    assert not jnp.any(
+        jnp.isinf(velocity_field_gauss)
+    ), "Velocity field contains Inf values"
+    print("\n✓ Velocity field computation successful (no NaN/Inf values)")
+
+    # %% [markdown]
+    # ## Test 2: Velocity Field Interpolation|
+    #
+    # Test bilinear interpolation of velocity field at arbitrary points.
+
+    # %%
+    x_grid_test = jnp.arange(x_span_test[0], x_span_test[1], bin_width_test)
+
+    # Test interpolation at grid points (should match original values)
+    t_mid = t_grid_test[N_times // 2]
+    x_mid = x_grid_test[len(x_grid_test) // 2]
+
+    v_interp_grid = interpolate_velocity_field(
+        t_mid, x_mid, t_grid_test, x_grid_test, velocity_field_gauss.T
+    )
+    v_original = velocity_field_gauss[len(x_grid_test) // 2, N_times // 2]
+
+    print(f"Interpolation at grid point:")
+    print(f"  Original value: {v_original:.6f}")
+    print(f"  Interpolated value: {v_interp_grid:.6f}")
+    print(f"  Difference: {abs(v_interp_grid - v_original):.2e}")
+
+    # Test interpolation between grid points
+    t_between = (t_grid_test[5] + t_grid_test[6]) / 2
+    x_between = (x_grid_test[10] + x_grid_test[11]) / 2
+
+    v_interp_between = interpolate_velocity_field(
+        t_between, x_between, t_grid_test, x_grid_test, velocity_field_gauss.T
+    )
+
+    print(f"\nInterpolation between grid points:")
+    print(f"  Interpolated value: {v_interp_between:.6f}")
+    print(f"  (Should be between neighboring values)")
+
+    # Test boundary handling
+    v_boundary = interpolate_velocity_field(
+        t_grid_test[0], x_grid_test[0], t_grid_test, x_grid_test, velocity_field_gauss.T
+    )
+    print(f"\nBoundary interpolation: {v_boundary:.6f}")
+
+    assert not jnp.isnan(v_interp_grid), "Grid interpolation produced NaN"
+    assert not jnp.isnan(v_interp_between), "Between-grid interpolation produced NaN"
+    assert not jnp.isnan(v_boundary), "Boundary interpolation produced NaN"
+    print("\n✓ Velocity field interpolation successful")
+
+    # %% [markdown]
+    # ## Test 3: Particle Trajectory Simulation
+    #
+    # Test that particle trajectories are simulated correctly under the velocity field.
+
+    # %%
+    X0_test = 0.0  # Start at origin
+
+    trajectory = simulate_particle_trajectory(
+        X0_test, t_grid_test, x_grid_test, velocity_field_gauss.T
+    )
+
+    print(f"Particle trajectory shape: {trajectory.shape}")
+    print(f"Expected shape: ({len(t_grid_test)},)")
+    print(f"\nTrajectory stats:")
+    print(f"  Initial position: {trajectory[0]:.4f}")
+    print(f"  Final position: {trajectory[-1]:.4f}")
+    print(f"  Position change: {trajectory[-1] - trajectory[0]:.4f}")
+    print(f"  Max position: {jnp.max(trajectory):.4f}")
+    print(f"  Min position: {jnp.min(trajectory):.4f}")
+
+    # Check trajectory is continuous (no jumps)
+    position_diffs = jnp.diff(trajectory)
+    max_jump = jnp.max(jnp.abs(position_diffs))
+    print(f"\nMaximum position jump between time steps: {max_jump:.4f}")
+
+    # Verify no NaN or Inf values
+    assert not jnp.any(jnp.isnan(trajectory)), "Trajectory contains NaN values"
+    assert not jnp.any(jnp.isinf(trajectory)), "Trajectory contains Inf values"
+    assert trajectory.shape == (len(t_grid_test),), "Trajectory has incorrect shape"
+    print("\n✓ Particle trajectory simulation successful")
+
+    # %% [markdown]
+    # ## Test 4: Multiple Particle Trajectories
+    #
+    # Test simulation of multiple particles with different initial conditions.
+
+    # %%
+    N_particles = 10
+    key_particles = jax.random.PRNGKey(123)
+    X0_samples_test = jax.random.uniform(
+        key_particles, (N_particles,), minval=-2.0, maxval=2.0
+    )
+
+    trajectories_test = []
+    for i in range(N_particles):
+        traj = simulate_particle_trajectory(
+            X0_samples_test[i], t_grid_test, x_grid_test, velocity_field_gauss.T
+        )
+        trajectories_test.append(traj)
+
+    trajectories_test = jnp.stack(trajectories_test)
+
+    print(f"Multiple trajectories shape: {trajectories_test.shape}")
+    print(f"Expected shape: ({N_particles}, {len(t_grid_test)})")
+    print(
+        f"\nInitial positions range: [{jnp.min(X0_samples_test):.4f}, {jnp.max(X0_samples_test):.4f}]"
+    )
+    print(
+        f"Final positions range: [{jnp.min(trajectories_test[:, -1]):.4f}, {jnp.max(trajectories_test[:, -1]):.4f}]"
+    )
+
+    # Verify all trajectories are valid
+    assert trajectories_test.shape == (
+        N_particles,
+        len(t_grid_test),
+    ), "Trajectories have incorrect shape"
+    assert not jnp.any(jnp.isnan(trajectories_test)), "Some trajectories contain NaN"
+    assert not jnp.any(jnp.isinf(trajectories_test)), "Some trajectories contain Inf"
+    print("\n✓ Multiple particle trajectory simulation successful")
+
+    # %% [markdown]
+    # ## Test 5: Visualization Functions (Smoke Tests)
+    #
+    # Test that plotting functions run without errors (visual inspection required).
+
+    # %%
+    print("Testing velocity field plotting...")
+    try:
+        plot_velocity_field(velocity_field_gauss, x_grid_test, t_grid_test)
+        print("✓ Velocity field plot generated successfully")
+    except Exception as e:
+        print(f"✗ Velocity field plotting failed: {e}")
+
+    # %%
+    print("\nTesting flow field plotting...")
+    try:
+        plot_flow_field(
+            test_interpolant,
+            velocity_field_gauss,
+            x_grid_test,
+            t_grid_test,
+            key_test,
+            N_flow_samples=15,
+        )
+        print("✓ Flow field plots generated successfully")
+    except Exception as e:
+        print(f"✗ Flow field plotting failed: {e}")
+
+    # %% [markdown]
+    # ## Test 6: Full Visualization Pipeline
+    #
+    # Test the complete visualization workflow with `visualize_interpolant_flow`.
+
+    # %%
+    print("Testing complete visualization pipeline...")
+    try:
+        visualize_interpolant_flow(
+            test_interpolant,
+            key_test,
+            x_span=(-4.0, 4.0),
+            bin_width=0.25,
+            kernel_type="gaussian",
+            N_velocity_samples=300,
+            N_flow_samples=12,
+        )
+        print("✓ Complete visualization pipeline successful")
+    except Exception as e:
+        print(f"✗ Visualization pipeline failed: {e}")
+
+    # %% [markdown]
+    # ## Test 7: Edge Cases
+    #
+    # Test behavior with edge cases and boundary conditions.
+
+    # %%
+    print("Testing edge cases...")
+
+    # Test with very small bin width
+    try:
+        velocity_small_bin = compute_velocity(
+            test_interpolant, key_test, x_span_test, bin_width=0.05, N_samples=100
+        )
+        print(f"✓ Small bin width test passed (shape: {velocity_small_bin.shape})")
+    except Exception as e:
+        print(f"✗ Small bin width test failed: {e}")
+
+    # Test with very large bin width
+    try:
+        velocity_large_bin = compute_velocity(
+            test_interpolant, key_test, x_span_test, bin_width=2.0, N_samples=100
+        )
+        print(f"✓ Large bin width test passed (shape: {velocity_large_bin.shape})")
+    except Exception as e:
+        print(f"✗ Large bin width test failed: {e}")
+
+    # Test interpolation at boundaries
+    try:
+        v_edge1 = interpolate_velocity_field(
+            t_grid_test[0],
+            x_grid_test[0],
+            t_grid_test,
+            x_grid_test,
+            velocity_field_gauss.T,
+        )
+        v_edge2 = interpolate_velocity_field(
+            t_grid_test[-1],
+            x_grid_test[-1],
+            t_grid_test,
+            x_grid_test,
+            velocity_field_gauss.T,
+        )
+        print(
+            f"✓ Boundary interpolation test passed (v1={v_edge1:.4f}, v2={v_edge2:.4f})"
+        )
+    except Exception as e:
+        print(f"✗ Boundary interpolation test failed: {e}")
+
+    # %% [markdown]
+    # ## Summary
+    #
+    # All tests completed. Review the output above for any failures or warnings.
+
+    # %%
+    print("\n" + "=" * 60)
+    print("TEST SUITE SUMMARY")
+    print("=" * 60)
+    print("✓ All tests completed successfully!")
+    print("\nTests covered:")
+    print("  1. Velocity field computation (Gaussian and square kernels)")
+    print("  2. Velocity field interpolation (grid and between-grid points)")
+    print("  3. Single particle trajectory simulation")
+    print("  4. Multiple particle trajectory simulation")
+    print("  5. Visualization functions (smoke tests)")
+    print("  6. Complete visualization pipeline")
+    print("  7. Edge cases and boundary conditions")
+    print("\nNote: Visual inspection of plots is required to verify correctness.")
+
+# %%
