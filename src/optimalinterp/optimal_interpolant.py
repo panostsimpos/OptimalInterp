@@ -89,14 +89,16 @@ class OptimalInterpolant(eqx.Module):
 
 def compute_optimal_psi(
     interpolant: OptimalInterpolant,
+    allow_failure: bool = False,
     **solver_kwargs,
-) -> shooting.OptimalInterpBVPSolution:
+) -> OptimalInterpolant:
     r"""
     Compute the optimal coefficient trajectories ψ(t) for the given optimal interpolant
     by solving the boundary value problem using the shooting method.
 
     Args:
         interpolant: An instance of OptimalInterpolant with defined Z and t.
+        allow_failure: If true, use output of shooting regardless of failure
         **solver_kwargs: Optional keyword arguments for the ODE solver. Supported options:
             - D_infl: Inflation parameter (default: 0.0)
             - t_span: Interval containing time lower and upper bound (default: (0.0, 1.0))
@@ -132,49 +134,50 @@ def compute_optimal_psi(
     stochastic_basis = interpolant.Z
     Phi = stochastic_basis.build_moment_generating_phi()
     N_terms = stochastic_basis.N_basis
-    (
-        t,
-        psi,
-        psi_dot,
-        initial_velocity,
-        residual_norm,
-        optimization_success,
-        solver_success,
-    ) = shooting.solve(Phi=Phi, N_terms=N_terms, **merged_kwargs)
+
+    bvp_soln = shooting.solve(Phi=Phi, N_terms=N_terms, **merged_kwargs)
 
     # Unpack solution and update interpolant
 
     def update_interpolant(
-        interpolant, psi, psi_dot, optimization_success, solver_success
-    ):
-        def on_success(interpolant, psi, psi_dot):
+        interpolant: OptimalInterpolant, t, psi, psi_dot, optimization_success, solver_success
+    ) -> OptimalInterpolant:
+        def on_success(interpolant: OptimalInterpolant, t, psi, psi_dot):
             interpolant = interpolant.with_psi(psi)
             interpolant = interpolant.with_psi_dot(psi_dot)
             interpolant = interpolant.with_has_solution(True)
             interpolant = interpolant.with_t(t)
             return interpolant
 
-        def on_failure(interpolant, psi, psi_dot):
-            jax.debug.print(
-                "Warning: BVP solver did not succeed. Returning interpolant without updated psi and psi_dot."
-            )
-            interpolant = interpolant.with_psi(jnp.zeros_like(psi))
-            interpolant = interpolant.with_psi_dot(jnp.zeros_like(psi_dot))
-            interpolant = interpolant.with_has_solution(False)
-            interpolant = interpolant.with_t(t)
-            return interpolant
+        def on_failure(interpolant: OptimalInterpolant, t, psi, psi_dot):
+            if allow_failure:
+                jax.debug.print(
+                    "Warning: BVP solver did not succeed. Returning failed output..."
+                )
+                return on_success(interpolant, t, psi, psi_dot)
+            else:
+                jax.debug.print(
+                    "Warning: BVP solver did not succeed. Returning interpolant without updated psi and psi_dot.\n" \
+                    "Use allow_failure=True if you want the output to be returned"
+                )
+                interpolant = interpolant.with_psi(jnp.zeros_like(psi))
+                interpolant = interpolant.with_psi_dot(jnp.zeros_like(psi_dot))
+                interpolant = interpolant.with_has_solution(False)
+                interpolant = interpolant.with_t(t)
+                return interpolant
 
         return jax.lax.cond(
-            optimization_success & solver_success,
+            optimization_success and solver_success,
             on_success,
             on_failure,
-            *(interpolant, psi, psi_dot),
+            *(interpolant, t, psi, psi_dot),
         )
 
     return update_interpolant(
         interpolant,
-        psi,
-        psi_dot,
-        optimization_success,
-        solver_success,
+        bvp_soln.t,
+        bvp_soln.psi,
+        bvp_soln.psi_dot,
+        bvp_soln.optimization_success,
+        bvp_soln.solver_success,
     )
