@@ -325,7 +325,7 @@ def visualize_interpolant_flow(
 
 if __name__ == "__main__":
     # Write some tests
-    from optimalinterp.stochastic_basis import GaussianBasis
+    from optimalinterp.stochastic_basis import GaussianConvolutionBasis
 
     # Enable 64-bit precision for accurate tests
     jax.config.update("jax_enable_x64", True)
@@ -334,11 +334,10 @@ if __name__ == "__main__":
     # # Visualization Module Tests
     # %%
 
-    simple_stochastic_basis = GaussianBasis(
+    simple_stochastic_basis = GaussianConvolutionBasis(
+        N_modes=2,
         mean=10.0,
         std_dev=2.0,
-        N_basis=2,
-        bridge_type="gaussian_convolution",
     )
 
     psi = jnp.array(
@@ -374,7 +373,7 @@ if __name__ == "__main__":
     )  # Shape: (n_paths, n_times)
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    t_vals = test_interpolant.t
+    t_vals = test_interpolant.default_tgrid()
 
     for i in range(n_paths):
         ax.plot(t_vals, sample_paths[i, :], alpha=0.5, linewidth=1)

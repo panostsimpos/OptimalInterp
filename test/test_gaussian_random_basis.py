@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
-from optimalinterp.stochastic_basis import GaussianBasis
+from optimalinterp.stochastic_basis import GaussianConvolutionBasis
 
 # %%
 
@@ -19,12 +19,12 @@ if __name__ == "__main__":
     n_samples = 1000
 
     # Initialize random basis
-    random_basis = GaussianBasis(N_terms, target_mean, target_std)
+    random_basis = GaussianConvolutionBasis(N_terms, target_mean, target_std)
 
     # Generate samples
     key = jax.random.PRNGKey(42)
     samples = random_basis.sample(
-        key=key, n_samples=n_samples
+        key, n_samples
     )  # Shape: (n_samples, N_terms)
 
     # Create figure
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     plt.show()
 
     # Print statistics for verification
-    print(f"Expected Z_0: mean=0, std=1")
+    print("Expected Z_0: mean=0, std=1")
     print(
         f"Actual Z_0:   mean={jnp.mean(samples[:, 0]):.4f}, std={jnp.std(samples[:, 0]):.4f}\n"
     )
