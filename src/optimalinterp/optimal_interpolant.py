@@ -132,7 +132,7 @@ def compute_optimal_psi_shooting(
 
     # Obtain Phi and solve using shooting method
     Phi = stochastic_basis.build_moment_generating_phi()
-    N_terms = stochastic_basis.N_basis
+    N_terms = stochastic_basis.N_modes
 
     bvp_soln = shooting.solve(Phi, N_terms, **solver_kwargs)
 

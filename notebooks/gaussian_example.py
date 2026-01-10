@@ -23,11 +23,10 @@ import optimalinterp as oi
 n_samples = 1000
 
 key = jax.random.PRNGKey(0)
-stochastic_basis = oi.GaussianBasis(
+stochastic_basis = oi.GaussianConvolutionBasis(
+    4,
     mean=2.0,
     std_dev=4.0,
-    N_basis=4,
-    bridge_type="gaussian_convolution",
 )
 samples = stochastic_basis.sample(N_samples=1000, key=key)
 source_samples = samples[:, 0]
@@ -83,11 +82,10 @@ plt.show()
 # $$ X_t = (1 - t) X_0 + t X_1 $$
 
 # %%
-simple_stochastic_basis = oi.GaussianBasis(
+simple_stochastic_basis = oi.GaussianConvolutionBasis(
+    N_modes=2,
     mean=10.0,
     std_dev=2.0,
-    N_basis=2,
-    bridge_type="gaussian_convolution",
 )
 
 simple_psi = jnp.array(
@@ -132,7 +130,9 @@ plt.show()
 # This is done by calling the `compute_optimal_psi` method.
 
 # %%
-optimal_interpolant = oi.optimal_interpolant.compute_optimal_psi_shooting(stochastic_basis, allow_failure=True, max_optimizer_steps=1000)
+optimal_interpolant = oi.optimal_interpolant.compute_optimal_psi_shooting(
+    stochastic_basis, allow_failure=True, max_optimizer_steps=1000
+)
 
 # %% [markdown]
 # ## 3. Visualize Sample Paths and mean velocity.
@@ -163,12 +163,15 @@ plt.show()
 
 # %%
 key = jax.random.PRNGKey(42)
-x_span = (-10.0, 15.0)
-
+x_grid = jnp.linspace(-10, 10, 1000)
 oi.visualization.visualize_interpolant_flow(
-    interpolant=optimal_interpolant,
-    key=key,
-    x_span=x_span,
+    optimal_interpolant,
+    key,
+    x_grid,
+    bin_width=0.2,
+    kernel_type="gaussian",
+    N_velocity_samples=1000,
+    N_flow_samples=50,
 )
 
 # %%

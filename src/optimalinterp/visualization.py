@@ -10,7 +10,6 @@ __all__ = [
     "visualize_interpolant_flow"
 ]
 
-# %%
 # =============================================================================
 # Generic binning-based velocity field computation
 # =============================================================================
@@ -21,11 +20,11 @@ def make_extent(*args)->tuple[float, float, float, float]:
 def compute_velocity(
     interpolant: ModalInterpolant,
     key: jax.Array,
-    x_span: tuple[float, float],
+    x_grid: Float[Array, " X"],
     bin_width: Float,
     kernel_type: str = "gaussian",
     N_samples: int = 1000,
-) -> Float[Array, "x_grid t_grid"]:
+) -> Float[Array, "t_grid x_grid"]:
     """
     Compute v(x,t) = E[dot{X}_t | X_t = x] using binning at a single time t.
     Given an interopolant X_t = Σ_{α=1}^N Z_α ψ_α(t) with time derivative
@@ -34,21 +33,14 @@ def compute_velocity(
 
     :param interpolant: An instance of OptimalInterpolant.
     :param key: JAX PRNG key.
-    :param x_span: Tuple (x_min, x_max) defining grid range.
+    :param x_grid: Grid points in x.
     :param bin_width: Width of bins for conditioning.
     :param N_samples: Number of samples of Z_α to use.
 
     Returns:
-    :return: Velocity values at grid points, shape (x_grid, t_grid).
+    :return: velocity_field where velocity_field has shape (t_grid, x_grid).
     """
     # Compute X_t and dot{X}_t for all samples
-    # Z_samples = interpolant.Z.sample(
-    #     N_samples=N_samples, key=key
-    # )  # (N_samples, N_basis)
-    # psi, psi_dot = interpolant.psi, interpolant.psi_dot  # (T, N_basis)
-    # X_samples = Z_samples @ psi.T  # (N_samples, T)
-    # Xdot_samples = Z_samples @ psi_dot.T  # (N_samples, T)
-
     X_samples, Xdot_samples = interpolant.sample_solution_and_deriv(key, N_samples, None)
 
     if kernel_type == "gaussian":
@@ -64,7 +56,6 @@ def compute_velocity(
 
     # For each x in x_grid, find samples in bin and average Xdot
     def velocity_at_x_and_t(x, t_idx):
-
         distances = (X_samples[:, t_idx] - x) / bin_width
         weights = kernel(distances)
         weighted_sum = jnp.sum(weights * Xdot_samples[:, t_idx])
@@ -72,7 +63,6 @@ def compute_velocity(
         # Avoid division by zero
         return jnp.where(weight_total > 1e-10, weighted_sum / weight_total, 0.0)
 
-    x_grid = jnp.arange(x_span[0], x_span[1], bin_width)
     t_indices = jnp.arange(len(interpolant.default_tgrid()))
 
     # Shape (t_grid, x_grid)
@@ -80,18 +70,18 @@ def compute_velocity(
         lambda t_idx: jax.vmap(lambda x: velocity_at_x_and_t(x, t_idx))(x_grid)
     )(t_indices)
 
-    return velocity_field.T  # Shape (x_grid, t_grid)
+    return velocity_field
 
 
 def plot_velocity_field(
-    velocity_field: Float[Array, "x_grid t_grid"],
+    velocity_field: Float[Array, "t_grid x_grid"],
     x_grid: Float[Array, " x_grid"],
     t_grid: Float[Array, " t_grid"],
 ):
     """
     Plot the velocity field v(x,t).
 
-    :param velocity_field: Velocity values at grid points.
+    :param velocity_field: Velocity values at grid points with shape (t_grid, x_grid).
     :param x_grid: Grid points in x.
     :param t_grid: Grid points in t.
 
@@ -220,9 +210,9 @@ def simulate_particle_trajectory(
 
 def plot_flow_field(
     interpolant: ModalInterpolant,
-    velocity_field: Float[Array, "x_grid t_grid"],
-    x_grid: Float[Array, " x_grid"],
-    t_grid: Float[Array, " t_grid"],
+    velocity_field: Float[Array, "T X"],
+    x_grid: Float[Array, " X"],
+    t_grid: Float[Array, " T"],
     key: jax.Array,
     N_flow_samples: int = 20,
 ):
@@ -230,7 +220,7 @@ def plot_flow_field(
     Plot flow field with particle trajectories.
 
     :param interpolant: An instance of OptimalInterpolant.
-    :param velocity_field: Precomputed velocity field.
+    :param velocity_field: Precomputed velocity field with shape (t_grid, x_grid).
     :param x_grid: Spatial grid for velocity field.
     :param t_grid: Time grid for velocity field.
     :param key: JAX PRNG key.
@@ -296,25 +286,22 @@ def plot_flow_field(
 def visualize_interpolant_flow(
     interpolant: ModalInterpolant,
     key: jax.Array,
-    x_span: tuple[float, float],
+    x_grid: Float[Array, " X"],
     bin_width: Float = 0.01,
     kernel_type: str = "gaussian",
     N_velocity_samples: int = 1000,
     N_flow_samples: int = 20,
 ):
-    # Compute velocity field
+    # Compute velocity field - now returns both velocity_field and x_grid
     velocity_field = compute_velocity(
         interpolant,
         key,
-        x_span,
+        x_grid,
         bin_width,
         kernel_type,
         N_samples=N_velocity_samples,
     )
 
-    x_grid = jnp.linspace(
-        x_span[0], x_span[1], int((x_span[1] - x_span[0]) / bin_width)
-    )
     t_grid = interpolant.default_tgrid()
 
     # Plot velocity field
@@ -378,11 +365,32 @@ if __name__ == "__main__":
 
     t_grid_test = test_interpolant.default_tgrid()
 
+    # Plot sample paths of the standard interpolant
+    n_paths = 50
+    t_eval = jnp.linspace(0, 1, 100)
+    key = jax.random.PRNGKey(0)
+    sample_paths = test_interpolant(
+        N_samples=n_paths, key=key, t_eval=t_eval
+    )  # Shape: (n_paths, n_times)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    t_vals = test_interpolant.t
+
+    for i in range(n_paths):
+        ax.plot(t_vals, sample_paths[i, :], alpha=0.5, linewidth=1)
+
+    ax.set_title("Standard Interpolant Sample Paths")
+    ax.set_xlabel("Time t")
+    ax.set_ylabel("x")
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
     # %% [markdown]
     # ## Test 1: Velocity Field Computation
     # %%
     key_test = jax.random.PRNGKey(42)
-    x_span_test = (-5.0, 5.0)
+    x_grid_test = jnp.linspace(-15, 15, 1000)
     bin_width_test = 0.01
     N_velocity_samples_test = 500
 
@@ -390,7 +398,7 @@ if __name__ == "__main__":
     velocity_field_gauss = compute_velocity(
         test_interpolant,
         key_test,
-        x_span_test,
+        x_grid_test,
         bin_width_test,
         kernel_type="gaussian",
         N_samples=N_velocity_samples_test,
@@ -400,7 +408,7 @@ if __name__ == "__main__":
     velocity_field_square = compute_velocity(
         test_interpolant,
         key_test,
-        x_span_test,
+        x_grid_test,
         bin_width_test,
         kernel_type="square",
         N_samples=N_velocity_samples_test,
@@ -409,7 +417,7 @@ if __name__ == "__main__":
     print(f"Velocity field (Gaussian) shape: {velocity_field_gauss.shape}")
     print(f"Velocity field (Square) shape: {velocity_field_square.shape}")
     print(
-        f"Expected shape: ({int((x_span_test[1] - x_span_test[0]) / bin_width_test)}, {len(t_grid_test)})"
+        f"Expected shape: ({len(t_grid_test)}, {int((x_grid_test[1] - x_grid_test[0]) / bin_width_test)})"
     )
     print( "\nVelocity field stats (Gaussian):")
     print(f"  Mean: {jnp.mean(velocity_field_gauss):.4f}")
@@ -427,21 +435,19 @@ if __name__ == "__main__":
     print("\n✓ Velocity field computation successful (no NaN/Inf values)")
 
     # %% [markdown]
-    # ## Test 2: Velocity Field Interpolation|
+    # ## Test 2: Velocity Field Interpolation
     #
     # Test bilinear interpolation of velocity field at arbitrary points.
 
     # %%
-    x_grid_test = jnp.arange(x_span_test[0], x_span_test[1], bin_width_test)
-
     # Test interpolation at grid points (should match original values)
     t_mid = t_grid_test[len(t_grid_test) // 2].item()
     x_mid = x_grid_test[len(x_grid_test) // 2].item()
 
     v_interp_grid = interpolate_velocity_field(
-        t_mid, x_mid, t_grid_test, x_grid_test, velocity_field_gauss.T
+        t_mid, x_mid, t_grid_test, x_grid_test, velocity_field_gauss
     )
-    v_original = velocity_field_gauss[len(x_grid_test) // 2, len(t_grid_test) // 2]
+    v_original = velocity_field_gauss[len(t_grid_test) // 2, len(x_grid_test) // 2]
 
     print( "Interpolation at grid point:")
     print(f"  Original value: {v_original:.6f}")
@@ -453,7 +459,7 @@ if __name__ == "__main__":
     x_between = ((x_grid_test[10] + x_grid_test[11]) / 2).item()
 
     v_interp_between = interpolate_velocity_field(
-        t_between, x_between, t_grid_test, x_grid_test, velocity_field_gauss.T
+        t_between, x_between, t_grid_test, x_grid_test, velocity_field_gauss
     )
 
     print( "\nInterpolation between grid points:")
@@ -462,7 +468,7 @@ if __name__ == "__main__":
 
     # Test boundary handling
     v_boundary = interpolate_velocity_field(
-        t_grid_test[0].item(), x_grid_test[0].item(), t_grid_test, x_grid_test, velocity_field_gauss.T
+        t_grid_test[0].item(), x_grid_test[0].item(), t_grid_test, x_grid_test, velocity_field_gauss
     )
     print(f"\nBoundary interpolation: {v_boundary:.6f}")
 
@@ -480,7 +486,7 @@ if __name__ == "__main__":
     X0_test = 0.0  # Start at origin
 
     trajectory = simulate_particle_trajectory(
-        X0_test, t_grid_test, x_grid_test, velocity_field_gauss.T
+        X0_test, t_grid_test, x_grid_test, velocity_field_gauss
     )
 
     print(f"Particle trajectory shape: {trajectory.shape}")
@@ -518,7 +524,7 @@ if __name__ == "__main__":
     trajectories_test = []
     for i in range(N_particles):
         traj = simulate_particle_trajectory(
-            X0_samples_test[i].item(), t_grid_test, x_grid_test, velocity_field_gauss.T
+            X0_samples_test[i].item(), t_grid_test, x_grid_test, velocity_field_gauss
         )
         trajectories_test.append(traj)
 
@@ -581,63 +587,15 @@ if __name__ == "__main__":
         visualize_interpolant_flow(
             test_interpolant,
             key_test,
-            x_span=(-4.0, 4.0),
-            bin_width=0.25,
+            x_grid=x_grid_test,
+            bin_width=0.01,
             kernel_type="gaussian",
-            N_velocity_samples=300,
-            N_flow_samples=12,
+            N_velocity_samples=1000,
+            N_flow_samples=50,
         )
         print("✓ Complete visualization pipeline successful")
     except Exception as e:
         print(f"✗ Visualization pipeline failed: {e}")
-
-    # %% [markdown]
-    # ## Test 7: Edge Cases
-    #
-    # Test behavior with edge cases and boundary conditions.
-
-    # %%
-    print("Testing edge cases...")
-
-    # Test with very small bin width
-    try:
-        velocity_small_bin = compute_velocity(
-            test_interpolant, key_test, x_span_test, bin_width=0.05, N_samples=100
-        )
-        print(f"✓ Small bin width test passed (shape: {velocity_small_bin.shape})")
-    except Exception as e:
-        print(f"✗ Small bin width test failed: {e}")
-
-    # Test with very large bin width
-    try:
-        velocity_large_bin = compute_velocity(
-            test_interpolant, key_test, x_span_test, bin_width=2.0, N_samples=100
-        )
-        print(f"✓ Large bin width test passed (shape: {velocity_large_bin.shape})")
-    except Exception as e:
-        print(f"✗ Large bin width test failed: {e}")
-
-    # Test interpolation at boundaries
-    try:
-        v_edge1 = interpolate_velocity_field(
-            t_grid_test[0].item(),
-            x_grid_test[0].item(),
-            t_grid_test,
-            x_grid_test,
-            velocity_field_gauss.T,
-        )
-        v_edge2 = interpolate_velocity_field(
-            t_grid_test[-1].item(),
-            x_grid_test[-1].item(),
-            t_grid_test,
-            x_grid_test,
-            velocity_field_gauss.T,
-        )
-        print(
-            f"✓ Boundary interpolation test passed (v1={v_edge1:.4f}, v2={v_edge2:.4f})"
-        )
-    except Exception as e:
-        print(f"✗ Boundary interpolation test failed: {e}")
 
     # %% [markdown]
     # ## Summary
