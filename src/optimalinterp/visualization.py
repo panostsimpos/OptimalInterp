@@ -62,7 +62,7 @@ def compute_velocity(
         weight_total = jnp.sum(weights)
         # Avoid division by zero
         safe_weight_total = jnp.where(weight_total > 1e-10, weight_total, 1.)
-        return jnp.where(weight_total > 1e-10, weighted_sum / safe_weight_total, 0.0)
+        return jnp.where(weight_total > 1e-14, weighted_sum / safe_weight_total, 0.0)
 
     t_indices = jnp.arange(len(interpolant.default_tgrid()))
 

@@ -2,13 +2,12 @@
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-from scipy.stats import gaussian_kde
 import optimalinterp as oi
 jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_debug_nans", True)
 
 # %%
-max_order, N_time, N_terms, num_steps = 24, 1025, 3, 1000
+max_order, N_time, N_terms, num_steps = 10, 1025, 5, 1000
 stochastic_basis = oi.GaussianConvolutionBasis(
     N_terms,
     mean=2.0,
@@ -16,10 +15,12 @@ stochastic_basis = oi.GaussianConvolutionBasis(
 )
 t_points, t_weights = oi.util.clenshaw_curtis(N_time)
 psi = oi.basis.LinearBasis(max_order, 'chebyshev')
+oi.basis.solve
+# choose residual_real_fcn=jnp.abs to measure error in absolute terms
 optimal_interpolant = oi.optimal_interpolant.compute_optimal_psi_basis(
     stochastic_basis, allow_failure=True, max_optimizer_steps=num_steps,
     psi_basis = psi, t_points=t_points, t_weights=t_weights,
-    atol=1e-12, rtol=1e-12
+    atol=1e-12, rtol=1e-12, residual_real_fcn=jnp.abs
 )
 
 # %%
@@ -47,15 +48,21 @@ plt.show()
 
 # %%
 key = jax.random.PRNGKey(42)
-x_grid = jnp.linspace(-10, 10, 1000)
+x_grid = jnp.linspace(-8, 8, 1001)
 oi.visualization.visualize_interpolant_flow(
     optimal_interpolant,
     key,
     x_grid,
-    bin_width=0.2,
+    bin_width=0.1,
     kernel_type="gaussian",
-    N_velocity_samples=1000,
+    N_velocity_samples=20000,
     N_flow_samples=50,
 )
 
+# %%
+lb: oi.basis.AbstractLinearBasis = optimal_interpolant.psi
+psi_evals = lb.evaluate_basis(jnp.linspace(0,1,101)) @ optimal_interpolant.psi_coeff
+plt.plot(psi_evals)
+plt.legend(["0", "1", "2"])
+plt.show()
 # %%

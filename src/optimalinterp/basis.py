@@ -457,9 +457,6 @@ def solve(
 ):
 
     t_points, t_weights = process_grid(t_points, t_weights)
-    print(
-          t_points.shape, t_weights.shape, t_points.min(), t_points.max(), jnp.square(t_weights).sum()
-    )
 
     if isinstance(psi_basis, str):
         psi_basis = LinearBasis(psi_basis_order, psi_basis)
