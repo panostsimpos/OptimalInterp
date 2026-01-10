@@ -18,9 +18,9 @@ __all__ = [
 
 _circ_convolve = jax.vmap(
         jax.vmap(triple_circ_convolve_freq,
-                 in_axes=(1, None, None), out_axes=0),
-        in_axes=(None, None, 1),
-        out_axes=2,  # Get out shape alpha, gamma
+                 in_axes=(0, None, None), out_axes=0),
+        in_axes=(None, None, 0),
+        out_axes=2,  # Get out shape alpha, beta, alpha
     )
 
 def convolve_tensors(
@@ -34,15 +34,15 @@ def convolve_tensors(
     --------------------------------------------------------------
     Inputs:
     -------
-    Tens1: (N_terms, N_terms) array
+    Tens1: (N_alpha, N_beta) array
         First input tensor
-    Kernel: (N_terms,) array
+    Kernel: (N_beta,) array
         Convolution kernel
-    Tens2: (N_terms, N_terms) array
+    Tens2: (N_alpha, N_beta) array
         Second input tensor
     Returns:
     --------
-    None: (N_terms, N_terms, N_terms) array
+    None: (N_alpha, N_beta, N_alpha) array
         Convolution output
     --------------------------------------------------------------
     """
@@ -69,8 +69,8 @@ def calculate_K(Phi: PhiTens) -> Fourier1Tens:
 
 
 def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
-    """
-    Calculate D_{alpha,beta} = -i * beta * Phi'_alpha(-beta psi_t[alpha]) Prod_{gamma != alpha} Phi_gamma(-beta psi_t[gamma])
+    r"""
+    Calculate $D_{alpha,beta} = -i * \beta * \Phi^\prime_\alpha(-\beta \psi_t[\alpha]) \prod_{\gamma != alpha} Phi_gamma(-\beta \psi_t[\gamma])$
     -----------------------------------------------
     Warning:
     --------
@@ -132,7 +132,7 @@ def calculate_C(
     C = C - convolve_tensors(D_tens, K_tens, D_tens)
 
     # DO NOT FORGET -i*beta factor!
-    beta_s = jnp.arange(Phi.shape[0], dtype=eltype)
+    beta_s = jnp.arange(Phi.shape[1], dtype=eltype)
     return -1j * beta_s[None, :, None] * C
 
 
@@ -153,11 +153,15 @@ def OptimalInterpPDEResidualPt(
     """
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     eltype = Phi.dtype
+    # Convert to complexes
+    psi_t = psi_t.astype(eltype)
+    psi_dot_t = psi_dot_t.astype(eltype)
+    psi_diff2_t = psi_diff2_t.astype(eltype)
     D_tens = calculate_D(Phi, Phi_prime)
     K_tens = calculate_K(Phi)
     C_tens = calculate_C(Phi, Phi_prime, Phi_prime_prime, D_tens, K_tens)
-    rhs = jnp.einsum('abg,a,g->b', C_tens, psi_dot_t, psi_dot_t, preferred_element_type=eltype)
-    lhs = jnp.einsum('ab,a->b', D_tens, psi_diff2_t, preferred_element_type=eltype)
+    rhs = jnp.einsum('abg,a,g->b', C_tens, psi_dot_t, psi_dot_t)
+    lhs = jnp.einsum('ab,a->b', D_tens, psi_diff2_t)
     return rhs - lhs
 
 

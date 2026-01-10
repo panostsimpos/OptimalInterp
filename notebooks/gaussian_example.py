@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 import optimalinterp as oi
 
+jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_debug_nans", True)
+
 # %% [markdown]
 # ## 1. Problem Setup
 # We start by building the problem. The core object here is the "StochasticBasis" which defined the family $(Z_\alpha)_{\alpha=1}^N$ of random variables that interpolates between the source and target measures.
@@ -131,7 +134,8 @@ plt.show()
 
 # %%
 optimal_interpolant = oi.optimal_interpolant.compute_optimal_psi_shooting(
-    stochastic_basis, allow_failure=True, max_optimizer_steps=1000
+    stochastic_basis, allow_failure=True, max_optimizer_steps=1000,
+    rtol=1e-12, atol=1e-12
 )
 
 # %% [markdown]

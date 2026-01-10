@@ -1,7 +1,10 @@
 import optimalinterp as oi
 import pytest
+import jax
 import jax.numpy as jnp
 import numpy as np
+jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_debug_nans", True)
 
 def test_D_K_C_tensor_shape():
     N_alpha, N_beta = 5, 7
@@ -16,7 +19,7 @@ def test_D_K_C_tensor_shape():
     assert K.shape == (N_beta,)
     C_tens = oi.ode_residual.calculate_C(
         Phi, Phi_prime, Phi_prime_prime, D_tens, K)
-    assert C_tens.shape == (N_terms, N_terms, N_terms)
+    assert C_tens.shape == (N_alpha, N_beta, N_alpha)
 
 
 def test_K_kernel():
@@ -65,11 +68,11 @@ def test_D_tensor():
     for beta in range(N_beta):
         for alpha in range(N_alpha):
             L_t[beta] *= Phi[alpha, beta]
-    D_tens_manual = jnp.ones((N_alpha, N_beta), dtype=np.complex128)
+    D_tens_manual = np.ones((N_alpha, N_beta), dtype=np.complex128)
     for beta in range(N_beta):
         for alpha in range(N_alpha):
             D_tens_manual[alpha, beta] = -1j * Phi_prime[alpha, beta] / Phi[alpha, beta] * L_t[beta]
-    assert D_tens == pytest.approx(D_tens_manual, rel=1e-15)
+    assert D_tens == pytest.approx(jnp.array(D_tens_manual), rel=1e-15)
 
 
 def test_C_tensor():

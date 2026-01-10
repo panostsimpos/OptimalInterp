@@ -175,7 +175,7 @@ class BasisParameterizedModalInterpolant(ModalInterpolant):
     psi_coeff: Optional[Float[Array, "N_shap N"]] = None
 
     def has_solution(self):
-        return self.psi_coeff is None
+        return self.psi_coeff is not None
 
     def sample_solution_and_deriv(self, key, N_samples, t_eval):
         assert self.psi_coeff is not None
@@ -214,7 +214,7 @@ def compute_optimal_psi_basis(
     """
 
     Phi = stochastic_basis.build_moment_generating_phi()
-    N_terms = stochastic_basis.N_basis
+    N_terms = stochastic_basis.N_modes
     # Set up the points and weights
     bvp_soln = basis.solve(Phi, N_terms, **solver_kwargs)
 
@@ -235,9 +235,7 @@ def compute_optimal_psi_basis(
             )
             return BasisParameterizedModalInterpolant(stochastic_basis, psi_basis)
 
-    return jax.lax.cond(
-        bvp_soln.success,
-        on_success,
-        on_failure,
-        stochastic_basis, bvp_soln.psi_basis, bvp_soln.coeffs_psi
-    )
+    if bvp_soln.success:
+        return on_success(stochastic_basis, bvp_soln.psi_basis, bvp_soln.coeffs_psi)
+    else:
+        return on_failure(stochastic_basis, bvp_soln.psi_basis, bvp_soln.coeffs_psi)

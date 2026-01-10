@@ -349,7 +349,8 @@ def create_collocated_basis_residual(
         N_terms: int, psi: AbstractLinearBasis,
         phi: MomentGeneratingPhi,
         fixed_orders: tuple[int, int],
-        wts: float | Float[Array, " T"] = 1.
+        wts: float | Float[Array, " T"],
+        residual_real_fcn: Callable[[Array], Array],
     ):
     """
     Create a residual using collocation. Assume that the first two elements of the linear basis are fixed to ensure boundary conditions.
@@ -366,6 +367,8 @@ def create_collocated_basis_residual(
     :type fixed_orders: tuple[int, int]
     :param wts: Optional weights for collocations
     :type wts: float | Float[Array, " T"]
+    :param residual_real_fcn: Function mapping the complex residual to the real plane
+    :type residual_real_fcn: Callable[[Array], Array]
     """
     t_grid = jnp.sort(t_grid)
     assert t_grid[0] == 0. and t_grid[-1] == 1.  # Ensure grid is valid
@@ -399,7 +402,7 @@ def create_collocated_basis_residual(
         residual = OptimalInterpPDEResidual(
             psi, psi_diff1, psi_diff2, phi
         )
-        return wts * jnp.abs(residual)
+        return wts * residual_real_fcn(residual)
 
     return jax.jit(basis_residual)
 
@@ -424,6 +427,7 @@ def process_grid(t_points: Float[Array, " T"] | int, t_weights: Optional[Float[A
     if t_weights is None:
         t_weights = jnp.ones(())
     else:
+        # Take sqrt since Levenberg--Marquadt will square each term in residual
         t_weights = jnp.sqrt(t_weights)
 
     if isinstance(t_points, int):
@@ -432,8 +436,7 @@ def process_grid(t_points: Float[Array, " T"] | int, t_weights: Optional[Float[A
         grid_perm = jnp.argsort(t_points)
         t_points = t_points[grid_perm]
 
-        # Take sqrt since Levenberg--Marquadt will square each term in residual
-        t_weights = jnp.sqrt(t_weights[grid_perm])
+        t_weights = t_weights[grid_perm]
         t_points = (t_points - t_points[0])/(t_points[-1] - t_points[0])
     return t_points,t_weights
 
@@ -448,10 +451,15 @@ def solve(
     verbose: bool = True,
     atol: float = 1e-8,
     rtol: float = 1e-8,
-    max_optimizer_steps=1000
+    max_optimizer_steps: int = 1000,
+    residual_real_fcn: Callable[[Array], Array] = jnp.real,
+    optimizer: Optional[optx.AbstractLeastSquaresSolver] = None
 ):
 
     t_points, t_weights = process_grid(t_points, t_weights)
+    print(
+          t_points.shape, t_weights.shape, t_points.min(), t_points.max(), jnp.square(t_weights).sum()
+    )
 
     if isinstance(psi_basis, str):
         psi_basis = LinearBasis(psi_basis_order, psi_basis)
@@ -465,13 +473,14 @@ def solve(
         residual_fcn = create_spline_residual(psi_basis, Phi)
     else:
         residual_fcn = create_collocated_basis_residual(
-            t_points, N_terms, psi_basis, Phi, fixed_orders, t_weights
+            t_points, N_terms, psi_basis, Phi, fixed_orders, t_weights, residual_real_fcn
         )
 
     verbose_set = frozenset({"step", "accepted", "loss", "step_size"}) if verbose else frozenset()
-    optimizer = optx.LevenbergMarquardt(
-        rtol=rtol, atol=atol, verbose=verbose_set
-    )
+    if optimizer is None:
+        optimizer = optx.LevenbergMarquardt(
+            rtol=rtol, atol=atol, verbose=verbose_set
+        )
     y0 = jnp.zeros((psi_basis.N_shap - 2, N_terms))
     residual_fcn(y0, None)
     opt_sol = optx.least_squares(residual_fcn, optimizer, y0, throw=False, max_steps=max_optimizer_steps)

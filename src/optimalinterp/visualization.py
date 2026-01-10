@@ -61,7 +61,8 @@ def compute_velocity(
         weighted_sum = jnp.sum(weights * Xdot_samples[:, t_idx])
         weight_total = jnp.sum(weights)
         # Avoid division by zero
-        return jnp.where(weight_total > 1e-10, weighted_sum / weight_total, 0.0)
+        safe_weight_total = jnp.where(weight_total > 1e-10, weight_total, 1.)
+        return jnp.where(weight_total > 1e-10, weighted_sum / safe_weight_total, 0.0)
 
     t_indices = jnp.arange(len(interpolant.default_tgrid()))
 
@@ -318,7 +319,6 @@ def visualize_interpolant_flow(
     )
 
 
-# %%
 # =======================
 # Tests for this module
 # =======================
@@ -330,9 +330,7 @@ if __name__ == "__main__":
     # Enable 64-bit precision for accurate tests
     jax.config.update("jax_enable_x64", True)
 
-    # %% [markdown]
-    # # Visualization Module Tests
-    # %%
+    # Visualization Module Tests
 
     simple_stochastic_basis = GaussianConvolutionBasis(
         N_modes=2,
@@ -385,9 +383,7 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.show()
 
-    # %% [markdown]
-    # ## Test 1: Velocity Field Computation
-    # %%
+    # Test 1: Velocity Field Computation
     key_test = jax.random.PRNGKey(42)
     x_grid_test = jnp.linspace(-15, 15, 1000)
     bin_width_test = 0.01
@@ -433,12 +429,10 @@ if __name__ == "__main__":
     ), "Velocity field contains Inf values"
     print("\n✓ Velocity field computation successful (no NaN/Inf values)")
 
-    # %% [markdown]
-    # ## Test 2: Velocity Field Interpolation
+    # Test 2: Velocity Field Interpolation
     #
     # Test bilinear interpolation of velocity field at arbitrary points.
 
-    # %%
     # Test interpolation at grid points (should match original values)
     t_mid = t_grid_test[len(t_grid_test) // 2].item()
     x_mid = x_grid_test[len(x_grid_test) // 2].item()
@@ -476,12 +470,10 @@ if __name__ == "__main__":
     assert not jnp.isnan(v_boundary), "Boundary interpolation produced NaN"
     print("\n✓ Velocity field interpolation successful")
 
-    # %% [markdown]
-    # ## Test 3: Particle Trajectory Simulation
+    # Test 3: Particle Trajectory Simulation
     #
     # Test that particle trajectories are simulated correctly under the velocity field.
 
-    # %%
     X0_test = 0.0  # Start at origin
 
     trajectory = simulate_particle_trajectory(
@@ -508,12 +500,10 @@ if __name__ == "__main__":
     assert trajectory.shape == (len(t_grid_test),), "Trajectory has incorrect shape"
     print("\n✓ Particle trajectory simulation successful")
 
-    # %% [markdown]
-    # ## Test 4: Multiple Particle Trajectories
+    # Test 4: Multiple Particle Trajectories
     #
     # Test simulation of multiple particles with different initial conditions.
 
-    # %%
     N_particles = 10
     key_particles = jax.random.PRNGKey(123)
     X0_samples_test = jax.random.uniform(
@@ -547,12 +537,10 @@ if __name__ == "__main__":
     assert not jnp.any(jnp.isinf(trajectories_test)), "Some trajectories contain Inf"
     print("\n✓ Multiple particle trajectory simulation successful")
 
-    # %% [markdown]
-    # ## Test 5: Visualization Functions (Smoke Tests)
+    # Test 5: Visualization Functions (Smoke Tests)
     #
     # Test that plotting functions run without errors (visual inspection required).
 
-    # %%
     print("Testing velocity field plotting...")
     try:
         plot_velocity_field(velocity_field_gauss, x_grid_test, t_grid_test)
@@ -560,7 +548,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Velocity field plotting failed: {e}")
 
-    # %%
     print("\nTesting flow field plotting...")
     try:
         plot_flow_field(
@@ -575,12 +562,10 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Flow field plotting failed: {e}")
 
-    # %% [markdown]
-    # ## Test 6: Full Visualization Pipeline
+    # Test 6: Full Visualization Pipeline
     #
     # Test the complete visualization workflow with `visualize_interpolant_flow`.
 
-    # %%
     print("Testing complete visualization pipeline...")
     try:
         visualize_interpolant_flow(
@@ -596,12 +581,10 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Visualization pipeline failed: {e}")
 
-    # %% [markdown]
-    # ## Summary
+    # Summary
     #
     # All tests completed. Review the output above for any failures or warnings.
 
-    # %%
     print("\n" + "=" * 60)
     print("TEST SUITE SUMMARY")
     print("=" * 60)
@@ -615,5 +598,3 @@ if __name__ == "__main__":
     print("  6. Complete visualization pipeline")
     print("  7. Edge cases and boundary conditions")
     print("\nNote: Visual inspection of plots is required to verify correctness.")
-
-# %%
