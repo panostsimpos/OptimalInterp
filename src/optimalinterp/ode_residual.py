@@ -7,7 +7,7 @@ from .convolution import triple_circ_convolve_freq
 PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
 Fourier1Tens = Float[Array, "alpha"]
 Fourier2Tens = Float[Array, "alpha beta"]
-Fourier3Tens = Float[Array, "alpha beta gamma"]
+Fourier3Tens = Float[Array, "alpha beta alpha"]
 
 __all__ = [
     "OptimalInterpBVP_ODE_RHS",
@@ -16,6 +16,12 @@ __all__ = [
     "OptimalInterpPDEResidual"
 ]
 
+_circ_convolve = jax.vmap(
+        jax.vmap(triple_circ_convolve_freq,
+                 in_axes=(1, None, None), out_axes=0),
+        in_axes=(None, None, 1),
+        out_axes=2,  # Get out shape alpha, gamma
+    )
 
 def convolve_tensors(
     Tens1: Fourier2Tens,
@@ -40,13 +46,7 @@ def convolve_tensors(
         Convolution output
     --------------------------------------------------------------
     """
-    out_map = jax.vmap(
-        jax.vmap(triple_circ_convolve_freq,
-                 in_axes=(1, None, None), out_axes=0),
-        in_axes=(None, None, 1),
-        out_axes=2,  # Get out shape alpha, gamma
-    )
-    return out_map(Tens1, Kernel, Tens2)
+    return _circ_convolve(Tens1, Kernel, Tens2)
     # TODO: Make sure shapes are correct!!
 
 
@@ -55,14 +55,14 @@ def calculate_K(Phi: PhiTens) -> Fourier1Tens:
     Calculate convolution kernel K_t = IFFT(1/FFT(L_t)), where L_t = Prod_alpha Phi_alpha(-beta psi_t[alpha])
     --------------------------------------------------------------
     Inputs:
-        Phi: (N_terms, N_terms) array
+        Phi: (N_alpha, N_beta) array
             Moment generating function evaluations
     Returns:
-        K_t: (N_terms,) array
+        K_t: (N_beta,) array
             Convolution kernel
     --------------------------------------------------------------
     """
-    L_t = Phi.prod(axis=0)  # (N_terms,) array
+    L_t = Phi.prod(axis=0)  # (N_beta,) array
     L_t_hat = jnp.fft.ifft(L_t)
     K_t = jnp.fft.fft(jnp.reciprocal(L_t_hat))
     return K_t
@@ -77,10 +77,10 @@ def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
     Indexing is flipped compared to paper notation!
     ------------------------------------------------
     Args:
-        Phi: (alpha, beta) array
-        Phi_prime: (alpha, beta) array
+        Phi: (N_alpha, N_beta) array
+        Phi_prime: (N_alpha, N_beta) array
     Returns:
-        D: (alpha, beta) array
+        D: (N_alpha, N_beta) array
     """
     return -1j * Phi_prime / Phi * Phi.prod(axis=0)[None, :]
 
@@ -97,20 +97,20 @@ def calculate_C(
     --------------------------------------------------------------
     Inputs:
     -------
-    Phi: (N_terms, N_terms) array
+    Phi: (N_alpha, N_beta) array
         Moment generating function evaluations with signature
         Phi[alpha, beta] = \Phi_alpha(-beta psi_t[alpha])
-    Phi_prime: (N_terms, N_terms) array
+    Phi_prime: (N_alpha, N_beta) array
         First derivatives of moment generating function evaluations and signature as above.
-    Phi_prime_prime: (N_terms, N_terms) array
+    Phi_prime_prime: (N_alpha, N_beta) array
         Second derivatives of moment generating function evaluations and signature as above.
-    D_tens: (N_terms, N_terms) array
+    D_tens: (N_alpha, N_beta) array
         D_{alpha,beta} tensor
-    K: (N_terms,) array
-        Convolution kernel
+    K: (N_beta,) array
+        K_{beta}Convolution kernel
     Returns:
     --------
-    C: (N_terms, N_terms, N_terms) array
+    C: (N_alpha, N_beta, N_alpha) array
         C_{alpha,beta,gamma} tensor
     --------------------------------------------------------------
     """

@@ -1,19 +1,19 @@
 import optimalinterp as oi
 import pytest
 import jax.numpy as jnp
-
+import numpy as np
 
 def test_D_K_C_tensor_shape():
-    N_terms = 5
+    N_alpha, N_beta = 5, 7
     mu = 1.0
     sigma = 2.0
-    phi = oi.GaussianPhi1D(mu, sigma)
-    psi_t = jnp.linspace(-1, 1, N_terms)
+    phi = oi.GaussianPhi1D(N_beta, mu, sigma)
+    psi_t = jnp.linspace(-1, 1, N_alpha)
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
-    assert D_tens.shape == (N_terms, N_terms)
+    assert D_tens.shape == (N_alpha, N_beta)
     K = oi.ode_residual.calculate_K(Phi)
-    assert K.shape == (N_terms,)
+    assert K.shape == (N_beta,)
     C_tens = oi.ode_residual.calculate_C(
         Phi, Phi_prime, Phi_prime_prime, D_tens, K)
     assert C_tens.shape == (N_terms, N_terms, N_terms)
@@ -23,7 +23,7 @@ def test_K_kernel():
     N_terms = 5
     mu = 1.0
     sigma = 2.0
-    phi = oi.GaussianPhi1D(mu, sigma)
+    phi = oi.GaussianPhi1D(N_terms, mu, sigma)
     psi_t = jnp.linspace(-2, 2, N_terms) + 1j * jnp.linspace(-2, 2, N_terms)
     Phi, _, _ = phi.evaluate(psi_t)
     K_t = oi.ode_residual.calculate_K(Phi)
@@ -54,23 +54,21 @@ def test_K_kernel():
 
 
 def test_D_tensor():
-    N_terms = 5
+    N_alpha, N_beta = 5, 7
     mu = 1.0
     sigma = 2.0
-    phi = oi.GaussianPhi1D(mu, sigma)
-    psi_t = jnp.linspace(-2, 2, N_terms)
+    phi = oi.GaussianPhi1D(N_beta, mu, sigma)
+    psi_t = jnp.linspace(-2, 2, N_alpha)
     Phi, Phi_prime, _ = phi.evaluate(psi_t)
     D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
-    L_t = jnp.ones((N_terms), dtype=complex)
-    for beta in range(N_terms):
-        for alpha in range(N_terms):
-            L_t = L_t.at[beta].multiply(Phi[alpha, beta])
-    D_tens_manual = jnp.ones((N_terms, N_terms), dtype=complex)
-    for beta in range(N_terms):
-        for alpha in range(N_terms):
-            D_tens_manual = D_tens_manual.at[alpha, beta].set(
-                -1j * Phi_prime[alpha, beta] / Phi[alpha, beta] * L_t[beta]
-            )
+    L_t = np.ones((N_beta), dtype=np.complex128)
+    for beta in range(N_beta):
+        for alpha in range(N_alpha):
+            L_t[beta] *= Phi[alpha, beta]
+    D_tens_manual = jnp.ones((N_alpha, N_beta), dtype=np.complex128)
+    for beta in range(N_beta):
+        for alpha in range(N_alpha):
+            D_tens_manual[alpha, beta] = -1j * Phi_prime[alpha, beta] / Phi[alpha, beta] * L_t[beta]
     assert D_tens == pytest.approx(D_tens_manual, rel=1e-15)
 
 
@@ -78,7 +76,7 @@ def test_C_tensor():
     N_terms = 5
     mu = 1.0
     sigma = 2.0
-    phi = oi.GaussianPhi1D(mu, sigma)
+    phi = oi.GaussianPhi1D(N_terms, mu, sigma)
     psi_t = jnp.linspace(-2, 2, N_terms)
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
