@@ -3,3 +3,4 @@ Last updated: Jan 9, 2026
 
 1. Make __call__ in StochasticInterpolant JIT compatible with vmap 
 2. Write tests for C tensor.
+3. Implement wrapped Gaussian distribution.
