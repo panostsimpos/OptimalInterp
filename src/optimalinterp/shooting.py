@@ -92,7 +92,7 @@ def solve(
     max_optimizer_steps: int = 1000,
     verbose: bool = True,
     plot_solution: bool = True,
-    return_real_part: bool = True,
+    only_return_real_part: bool = True,
     solver: diffrax.AbstractSolver = diffrax.Kvaerno5(),
 ) -> OptimalInterpBVPShootingSolution:
 
@@ -153,7 +153,7 @@ def solve(
     ode_sol, ode_result = shoot_once(
         opt_sol.value, *args, saveat=saveat, **solver_kwargs
     )
-    if return_real_part:
+    if only_return_real_part:
         psi_t = ode_sol[:, :N_terms]
         psi_dot_t = ode_sol[:, N_terms : 2 * N_terms]
     else:
@@ -207,7 +207,7 @@ if __name__ == "__main__":
         max_solver_steps=5000,
         verbose=True,
         plot_solution=True,
-        return_real_part=True,
+        only_return_real_part=True,
     )
     # %%
 

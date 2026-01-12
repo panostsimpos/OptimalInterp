@@ -27,7 +27,7 @@ n_samples = 1000
 
 key = jax.random.PRNGKey(0)
 stochastic_basis = oi.GaussianConvolutionBasis(
-    4,
+    N_modes=4,
     mean=2.0,
     std_dev=4.0,
 )
@@ -133,9 +133,10 @@ plt.show()
 # This is done by calling the `compute_optimal_psi` method.
 
 # %%
+N_test = 2*stochastic_basis.N_modes # Choose number of test functions as 2 x N_modes
 optimal_interpolant = oi.optimal_interpolant.compute_optimal_psi_shooting(
-    stochastic_basis, allow_failure=True, max_optimizer_steps=1000,
-    rtol=1e-12, atol=1e-12
+    stochastic_basis, allow_failure=True, N_test=N_test,
+    max_optimizer_steps=1000, rtol=1e-12, atol=1e-12
 )
 
 # %% [markdown]
@@ -167,14 +168,14 @@ plt.show()
 
 # %%
 key = jax.random.PRNGKey(42)
-x_grid = jnp.linspace(-10, 10, 1000)
+x_grid = jnp.linspace(-10, 10, 101)
 oi.visualization.visualize_interpolant_flow(
     optimal_interpolant,
     key,
     x_grid,
     bin_width=0.2,
     kernel_type="gaussian",
-    N_velocity_samples=1000,
+    N_velocity_samples=15000,
     N_flow_samples=50,
 )
 

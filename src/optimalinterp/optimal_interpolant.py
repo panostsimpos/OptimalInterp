@@ -115,6 +115,7 @@ class TimeInterpolatedModalInterpolant(ModalInterpolant):
 def compute_optimal_psi_shooting(
     stochastic_basis: StochasticBasis,
     allow_failure: bool = False,
+    N_test: int = 0,
     **solver_kwargs,
 ) -> ModalInterpolant:
     r"""
@@ -123,7 +124,8 @@ def compute_optimal_psi_shooting(
 
     Args:
         stochastic_basis: Modal basis for random variables
-        allow_failure: If true, use output of shooting regardless of failure
+        allow_failure (False): If true, use output of shooting regardless of failure
+        N_test (stochastic_basis.N_modes): Number of test functions for residual
         **solver_kwargs: see `shooting.solve`
 
     Returns:
@@ -131,10 +133,10 @@ def compute_optimal_psi_shooting(
     """
 
     # Obtain Phi and solve using shooting method
-    Phi = stochastic_basis.build_moment_generating_phi()
-    N_terms = stochastic_basis.N_modes
+    Phi = stochastic_basis.build_moment_generating_phi(N_test)
+    N_modes = stochastic_basis.N_modes
 
-    bvp_soln = shooting.solve(Phi, N_terms, **solver_kwargs)
+    bvp_soln = shooting.solve(Phi, N_modes, **solver_kwargs)
 
     # Unpack solution and update interpolant
     def on_success(t, psi, psi_dot):
@@ -199,6 +201,7 @@ class BasisParameterizedModalInterpolant(ModalInterpolant):
 def compute_optimal_psi_basis(
     stochastic_basis: StochasticBasis,
     allow_failure: bool = False,
+    N_test: int = 0,
     **solver_kwargs,
 ) -> ModalInterpolant:
     r"""
@@ -207,13 +210,15 @@ def compute_optimal_psi_basis(
 
     Args:
         stochastic_basis: Modal basis for random variables
+        allow_failure (False): Whether to return if the optimization gives a failure
+        N_test (stochastic_basis.N_modes): Number of test functions for residual
         **solver_kwargs: see `basis.solve`
 
     Returns:
         An instance of OptimalInterpBVPSolution containing the computed trajectories and metadata.
     """
 
-    Phi = stochastic_basis.build_moment_generating_phi()
+    Phi = stochastic_basis.build_moment_generating_phi(N_test)
     N_terms = stochastic_basis.N_modes
     # Set up the points and weights
     bvp_soln = basis.solve(Phi, N_terms, **solver_kwargs)
