@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float
 from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
 from .convolution import triple_circ_convolve_freq
+from . import util
 
 PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
 Fourier1Tens = Float[Array, "alpha"]
@@ -63,9 +64,10 @@ def calculate_K(Phi: PhiTens) -> Fourier1Tens:
     --------------------------------------------------------------
     """
     L_t = Phi.prod(axis=0)  # (N_beta,) array
-    L_t_hat = jnp.fft.ifft(L_t)
-    K_t = jnp.fft.fft(jnp.reciprocal(L_t_hat))
-    return K_t
+    L_t_hat = util.fourier_coeffs_to_evals(L_t)
+    K_t = util.evals_to_fourier_coeffs(jnp.reciprocal(L_t_hat))
+    # TODO: make dimensionality
+    return 2 * jnp.pi * K_t
 
 
 def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
@@ -82,7 +84,7 @@ def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
     Returns:
         D: (N_alpha, N_beta) array
     """
-    return -1j * Phi_prime / Phi * Phi.prod(axis=0)[None, :]
+    return -1j * Phi_prime * Phi.prod(axis=0)[None, :] / Phi
 
 
 def calculate_C(
@@ -114,27 +116,26 @@ def calculate_C(
         C_{alpha,beta,gamma} tensor
     --------------------------------------------------------------
     """
-    N_terms = D_tens.shape[0]
-    phi_prod = Phi.prod(axis=0)
-
-    ratio_1 = Phi_prime / Phi
     eltype = Phi.dtype
-    C = jnp.einsum(
-        'ab,gb,b->abg', ratio_1, ratio_1, phi_prod, preferred_element_type=eltype
+    phi_prod = Phi.prod(axis=0)
+    diff1_ratio = Phi_prime / Phi
+    diff2_ratio = Phi_prime_prime / Phi
+
+    convolve_term = convolve_tensors(D_tens, K_tens, D_tens)
+
+    alpha_v = jnp.arange(Phi.shape[0])
+    beta_v = jnp.arange(Phi.shape[1])
+
+    diff1_term = jnp.einsum(
+        'ab,gb,b->abg', diff1_ratio, diff1_ratio, phi_prod, preferred_element_type=eltype
     )
+    diff1_term = diff1_term.at[alpha_v, :, alpha_v].set(0.)
+    diff2_term = diff2_ratio * phi_prod[jnp.newaxis]
 
-    # Terms where alpha == gamma
-    idx = jnp.arange(N_terms)
-    ratio_2 = Phi_prime_prime / Phi
-    C = C.at[idx, :, idx].set(-ratio_2 * phi_prod[None, :])
+    combine_terms = diff1_term - convolve_term
+    combine_terms = combine_terms.at[alpha_v, :, alpha_v].subtract(diff2_term)
 
-    # Add convolutional term
-    C = C - convolve_tensors(D_tens, K_tens, D_tens)
-
-    # DO NOT FORGET -i*beta factor!
-    beta_s = jnp.arange(Phi.shape[1], dtype=eltype)
-    return -1j * beta_s[None, :, None] * C
-
+    return 1j * beta_v[jnp.newaxis, :, jnp.newaxis] * combine_terms
 
 def OptimalInterpPDEResidualPt(
     psi_t: PsiT, psi_dot_t: PsiT, psi_diff2_t: PsiT, phi: MomentGeneratingPhi
