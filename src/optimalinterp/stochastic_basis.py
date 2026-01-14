@@ -73,6 +73,41 @@ class GaussianConvolutionBasis(StochasticBasis):
         return samples
 
     def moment_generating_phi_builder(self, N_outputs):
-        return oi.moment_generator.GaussianPhi1D(
+        return oi.moment_generator.GaussianConvolutionPhi1D(
             N_outputs, mu=self.mean, sigma=self.std_dev
+        )
+
+class WrappedGaussianConvolutionBasis(StochasticBasis):
+    r"""
+    Stochastic basis where
+    Z_0 ~ N_T(0, 1),
+    Z_N ~ N_T(mean, std_dev^2),
+    Z_alpha = (1 - alpha/N) * N_T(0, 1) + (alpha/N) * N_T(mean,std_dev^2)
+    for alpha = 1, ..., N-1.
+    """
+
+    N_modes: int = eqx.field()
+    max_period_idx: int
+    mean: float
+    std_dev: float
+
+    def sample(self, key, N_samples):
+        alpha_ratios = jnp.linspace(0, 1, self.N_modes)
+        mean_Z = alpha_ratios * self.mean
+        Cov_Z = jnp.diag(
+            (1 - alpha_ratios) ** 2 + (alpha_ratios**2) * self.std_dev**2
+        )  # Shape (N_basis, N_basis)
+
+        base_randomness = jax.random.normal(
+            key, shape=(N_samples, self.N_modes))
+        samples = mean_Z + base_randomness @ jnp.sqrt(
+            Cov_Z
+        )  # Because diagonal, Cholesky is just sqrt of diag
+        toroidal = jnp.mod(samples, 2*jnp.pi)
+        # Wrap around torus, accounting for pythonic modulo operation
+        return jnp.where(toroidal < 0., 2*jnp.pi + toroidal, toroidal)
+
+    def moment_generating_phi_builder(self, N_outputs):
+        return oi.moment_generator.WrappedGaussianConvolutionPhi1D(
+            self.N_modes, N_outputs, self.max_period_idx, mu=self.mean, sigma=self.std_dev
         )

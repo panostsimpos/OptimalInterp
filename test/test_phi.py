@@ -13,8 +13,8 @@ def test_phi_1d_shape():
     mu = 1.0
     sigma = 2.0
     N_alpha_terms, N_beta_terms = 5, 7
-    phi_g = oi.GaussianPhi1D(N_beta_terms, mu, sigma)
-    phi_wrapped = oi.WrappedGaussianBridgePhi1D(N_alpha_terms, N_beta_terms, 10, mu, sigma)
+    phi_g = oi.GaussianConvolutionPhi1D(N_beta_terms, mu, sigma)
+    phi_wrapped = oi.WrappedGaussianConvolutionPhi1D(N_alpha_terms, N_beta_terms, 10, mu, sigma)
     for phi in [phi_g, phi_wrapped]:
         psi_t = jnp.linspace(-1, 1, N_alpha_terms)
         Phi, Phi_prime, Phi_double_prime = phi.evaluate(psi_t)
@@ -41,7 +41,7 @@ def test_gaussian_phi_1d_eval():
     mu = 1.0
     sigma = 2.0
     N_alpha, N_beta = 5, 7
-    phi = oi.GaussianPhi1D(N_beta, mu, sigma)
+    phi = oi.GaussianConvolutionPhi1D(N_beta, mu, sigma)
     psi_t = jnp.linspace(-1, 1, N_alpha)
     beta = jnp.arange(N_beta)
     input_vals = -beta.reshape(1, -1) * psi_t.reshape(-1, 1)
@@ -54,7 +54,7 @@ def test_wrapped_gaussian_phi_1d_eval():
     mu = 1.0
     sigma = 2.0
     N_alpha, N_beta, wrap_max_idx = 5, 7, 10
-    phi = oi.WrappedGaussianBridgePhi1D(N_alpha, N_beta, wrap_max_idx, mu, sigma)
+    phi = oi.WrappedGaussianConvolutionPhi1D(N_alpha, N_beta, wrap_max_idx, mu, sigma)
     psi_t = jnp.linspace(-1, 1, N_alpha)
     Phi, _, _ = phi.evaluate(psi_t)
     k_vec = jnp.arange(-wrap_max_idx, wrap_max_idx + 1)
@@ -74,8 +74,8 @@ def test_phi_1d_derivatives():
     mu = 1.0
     sigma = 2.0
     N_alpha, N_beta = 5, 7
-    phi_g = oi.GaussianPhi1D(N_beta, mu, sigma)
-    phi_wrapped = oi.WrappedGaussianBridgePhi1D(N_alpha, N_beta, 10, mu, sigma)
+    phi_g = oi.GaussianConvolutionPhi1D(N_beta, mu, sigma)
+    phi_wrapped = oi.WrappedGaussianConvolutionPhi1D(N_alpha, N_beta, 10, mu, sigma)
     psi_t = jnp.linspace(-1, 1, N_alpha)
     for phi in [phi_g, phi_wrapped]:
         _, Phi_prime, Phi_double_prime = phi.evaluate(psi_t)

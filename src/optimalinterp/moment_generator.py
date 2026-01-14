@@ -7,7 +7,7 @@ from . import util
 
 PsiT = Float[Array, "alpha"]
 PhiTens = Complex[Array, "alpha beta"]
-__all__ = ["MomentGeneratingPhi", "GaussianPhi1D"]
+__all__ = ["MomentGeneratingPhi", "GaussianConvolutionPhi1D"]
 
 
 class MomentGeneratingPhi(ABC):
@@ -29,7 +29,7 @@ class MomentGeneratingPhi(ABC):
         pass
 
 
-class GaussianPhi1D(MomentGeneratingPhi):
+class GaussianConvolutionPhi1D(MomentGeneratingPhi):
     def __init__(self, N_outputs: int, mu: float, sigma: float):
         r"""
         Build MomentGeneratingPhi for 1D Gaussian example where we take
@@ -86,7 +86,7 @@ class GaussianPhi1D(MomentGeneratingPhi):
         return jax.random.normal(key, shape=(num_samples,)) * self.sigma + self.mu
 
 
-class WrappedGaussianBridgePhi1D(MomentGeneratingPhi):
+class WrappedGaussianConvolutionPhi1D(MomentGeneratingPhi):
     def __init__(self, N_inputs: int, N_outputs: int, max_period_idx: int, mu: float, sigma: float):
         r"""
         Build MomentGeneratingPhi for 1D Wrapped Gaussian example where we take

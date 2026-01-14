@@ -10,7 +10,7 @@ def test_D_K_C_tensor_shape():
     N_alpha, N_beta = 5, 7
     mu = 1.0
     sigma = 2.0
-    phi = oi.GaussianPhi1D(N_beta, mu, sigma)
+    phi = oi.GaussianConvolutionPhi1D(N_beta, mu, sigma)
     psi_t = jnp.linspace(-1, 1, N_alpha)
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
@@ -39,7 +39,7 @@ def test_K_kernel():
     N_terms = 5
     mu = 1.0
     sigma = 2.0
-    phi = oi.GaussianPhi1D(N_terms, mu, sigma)
+    phi = oi.GaussianConvolutionPhi1D(N_terms, mu, sigma)
     psi_t = jnp.linspace(-2, 2, N_terms) + 1j * jnp.linspace(-2, 2, N_terms)
     Phi, _, _ = phi.evaluate(psi_t)
     K_t = oi.ode_residual.calculate_K(Phi)
@@ -74,7 +74,7 @@ def test_D_tensor():
     N_alpha, N_beta = 5, 7
     mu = 1.0
     sigma = 2.0
-    phi = oi.GaussianPhi1D(N_beta, mu, sigma)
+    phi = oi.GaussianConvolutionPhi1D(N_beta, mu, sigma)
     psi_t = jnp.linspace(-2, 2, N_alpha)
     Phi, Phi_prime, _ = phi.evaluate(psi_t)
     D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
@@ -93,7 +93,7 @@ def test_C_tensor():
     N_terms = 5
     mu = 1.0
     sigma = 2.0
-    phi = oi.GaussianPhi1D(N_terms, mu, sigma)
+    phi = oi.GaussianConvolutionPhi1D(N_terms, mu, sigma)
     psi_t = jnp.linspace(-2, 2, N_terms)
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     D_tens = oi.ode_residual.calculate_D(Phi, Phi_prime)
