@@ -1,6 +1,6 @@
 from .basis import SplineBasis
 from .solution_approximator import LinearSolutionApproximator
-from .moment_generator import GaussianPhi1D, MomentGeneratingPhi
+from .moment_generator import GaussianPhi1D, MomentGeneratingPhi, WrappedGaussianBridgePhi1D
 from . import ode_residual
 from .mass_matrix_implicit_euler import ImplicitEulerMass
 from . import util
@@ -14,6 +14,7 @@ __all__ = [
     "LinearSolutionApproximator",
     "GaussianConvolutionBasis",
     "GaussianPhi1D",
+    "WrappedGaussianBridgePhi1D",
     "ode_residual",
     "ImplicitEulerMass",
     "convolution",
