@@ -84,9 +84,10 @@ class Spline(ABC):
 def _eval_sinc_spline_diff2(points: BasisTensT):
     eval = jnp.sinc(points)
     cosx = jnp.cos(jnp.pi * points)
-    diff = (cosx - eval) / points
+    safe_pts = jnp.where(points == 0., 1., points)
+    diff = (cosx - eval) / safe_pts
     diff = jnp.where(points == 0., 0., diff)
-    diff2 = -(2 * diff / points + jnp.pi*jnp.pi*eval)
+    diff2 = -(2 * diff / safe_pts + jnp.pi*jnp.pi*eval)
     diff2 = jnp.where(points == 0., -jnp.pi * jnp.pi / 3, diff2)
     return eval, diff, diff2
 
@@ -102,7 +103,8 @@ class SincSpline(Spline):
     def evaluate_diff(self, points):
         eval = self.evaluate(points)
         cosx = jnp.cos(jnp.pi * points)
-        diff = (cosx - eval) / points
+        safe_pts = jnp.where(points == 0., 1., points)
+        diff = (cosx - eval) / safe_pts
         diff = jnp.where(points == 0., 0., diff)
         return eval, diff
 
