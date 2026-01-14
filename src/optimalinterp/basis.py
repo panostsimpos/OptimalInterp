@@ -8,7 +8,7 @@ from jaxtyping import Float, Array
 import optimistix as optx
 from .moment_generator import MomentGeneratingPhi
 from .ode_residual import OptimalInterpPDEResidual
-from . import chebyshev
+from . import chebyshev, util
 
 __all__ = ["SplineBasis", "LinearBasis"]
 
@@ -98,18 +98,15 @@ class SincSpline(Spline):
         return isinstance(other, SincSpline)
 
     def evaluate(self, points):
-        return jnp.sinc(points)
+        return util.sinc_eval(points)
 
     def evaluate_diff(self, points):
-        eval = self.evaluate(points)
-        cosx = jnp.cos(jnp.pi * points)
-        safe_pts = jnp.where(points == 0., 1., points)
-        diff = (cosx - eval) / safe_pts
-        diff = jnp.where(points == 0., 0., diff)
+        eval, diff = util.sinc_diff(points)
         return eval, diff
 
     def evaluate_diff2(self, points):
-        return _eval_sinc_spline_diff2(points)
+        eval, diff, diff2 = util.sinc_diff2(points)
+        return eval, diff, diff2
 
 
 class HatSpline(Spline):
