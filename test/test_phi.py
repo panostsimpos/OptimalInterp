@@ -23,23 +23,51 @@ def test_phi_1d_shape():
         assert Phi_double_prime.shape == (N_alpha_terms, N_beta_terms)
 
 
+def gaussian_characteristic_function(input, mu, sigma):
+    output = jnp.zeros_like(input, dtype=jnp.complex128)
+    N_alpha, N_beta = input.shape
+    for alpha in range(N_alpha):
+        for beta in range(N_beta):
+            t = input[alpha, beta]# -beta * psi_t[alpha]
+            ratio = alpha / (N_alpha - 1)
+            mean_term = 1j * mu * ratio * t
+            noise_term = 0j + 0.5 * t * t * ((1 - ratio) ** 2 + (ratio * sigma) ** 2)
+            log_phi = mean_term - noise_term
+            output = output.at[alpha, beta].set(jnp.exp(log_phi))
+    return output
+
+
 def test_gaussian_phi_1d_eval():
     mu = 1.0
     sigma = 2.0
     N_alpha, N_beta = 5, 7
     phi = oi.GaussianPhi1D(N_beta, mu, sigma)
     psi_t = jnp.linspace(-1, 1, N_alpha)
-    char_function_gauss = jnp.zeros((N_alpha, N_beta), dtype=jnp.complex128)
-    for beta in range(N_beta):
-        for alpha in range(N_alpha):
-            t = -beta * psi_t[alpha]
-            ratio = alpha / (N_alpha - 1)
-            mean_term = 1j * mu * ratio * t
-            noise_term = 0j + 0.5 * t * t * ((1 - ratio) ** 2 + (ratio * sigma) ** 2)
-            log_phi = mean_term - noise_term
-            char_function_gauss = char_function_gauss.at[alpha, beta].set(jnp.exp(log_phi))
+    beta = jnp.arange(N_beta)
+    input_vals = -beta.reshape(1, -1) * psi_t.reshape(-1, 1)
+    char_function_gauss = gaussian_characteristic_function(input_vals, mu, sigma)
     Phi, _, _ = phi.evaluate(psi_t)
     assert Phi == pytest.approx(char_function_gauss, rel=1e-15)
+
+
+def test_wrapped_gaussian_phi_1d_eval():
+    mu = 1.0
+    sigma = 2.0
+    N_alpha, N_beta, wrap_max_idx = 5, 7, 10
+    phi = oi.WrappedGaussianBridgePhi1D(N_alpha, N_beta, wrap_max_idx, mu, sigma)
+    psi_t = jnp.linspace(-1, 1, N_alpha)
+    Phi, _, _ = phi.evaluate(psi_t)
+    k_vec = jnp.arange(-wrap_max_idx, wrap_max_idx + 1)
+    k_mat = k_vec.reshape(1,-1).repeat(N_alpha,axis=0)
+    # (alpha, k)
+    char_function_gauss_k = gaussian_characteristic_function(k_mat, mu, sigma)
+    # (k, alpha, beta)
+    beta_psi = -jnp.arange(N_beta).reshape(1,1,-1) * psi_t.reshape(1,-1,1)
+    difference = beta_psi - k_vec.reshape(-1, 1, 1)
+    exp = jnp.exp(1j * jnp.pi * difference)
+    sinc = jnp.sinc(difference)
+    ref_Phi = jnp.einsum("ak,kab,kab->ab", char_function_gauss_k, exp, sinc)
+    assert Phi == pytest.approx(ref_Phi, rel=1e-15)
 
 
 def test_phi_1d_derivatives():
