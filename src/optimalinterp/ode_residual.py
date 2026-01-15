@@ -2,22 +2,26 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 from .moment_generator import PsiT, PhiTens, MomentGeneratingPhi
-from .basis import SplineBasis, AbstractLinearBasis
 from .convolution import triple_circ_convolve_freq
+from . import util
 
 PsiODET = Float[Array, "alpha+alpha"]  # concat: [Ψ(t); \dot{Ψ}(t)]
 Fourier1Tens = Float[Array, "alpha"]
 Fourier2Tens = Float[Array, "alpha beta"]
-Fourier3Tens = Float[Array, "alpha beta gamma"]
+Fourier3Tens = Float[Array, "alpha beta alpha"]
 
 __all__ = [
     "OptimalInterpBVP_ODE_RHS",
     "OptimalInterpBVP_DAE_RHS",
     "OptimalInterpBVP_DAE_LHS",
-    "create_spline_residual",
-    "create_collocated_basis_residual",
-    "pad_coeffs",
+    "OptimalInterpPDEResidual",
 ]
+
+_circ_convolve = jax.vmap(
+    jax.vmap(triple_circ_convolve_freq, in_axes=(0, None, None), out_axes=0),
+    in_axes=(None, None, 0),
+    out_axes=2,  # Get out shape alpha, beta, alpha
+)
 
 
 def convolve_tensors(
@@ -31,24 +35,19 @@ def convolve_tensors(
     --------------------------------------------------------------
     Inputs:
     -------
-    Tens1: (N_terms, N_terms) array
+    Tens1: (N_alpha, N_beta) array
         First input tensor
-    Kernel: (N_terms,) array
+    Kernel: (N_beta,) array
         Convolution kernel
-    Tens2: (N_terms, N_terms) array
+    Tens2: (N_alpha, N_beta) array
         Second input tensor
     Returns:
     --------
-    None: (N_terms, N_terms, N_terms) array
+    None: (N_alpha, N_beta, N_alpha) array
         Convolution output
     --------------------------------------------------------------
     """
-    out_map = jax.vmap(
-        jax.vmap(triple_circ_convolve_freq, in_axes=(1, None, None), out_axes=0),
-        in_axes=(None, None, 1),
-        out_axes=2,  # Get out shape alpha, gamma
-    )
-    return out_map(Tens1, Kernel, Tens2)
+    return _circ_convolve(Tens1, Kernel, Tens2)
     # TODO: Make sure shapes are correct!!
 
 
@@ -57,34 +56,35 @@ def calculate_K(Phi: PhiTens) -> Fourier1Tens:
     Calculate convolution kernel K_t = IFFT(1/FFT(L_t)), where L_t = Prod_alpha Phi_alpha(-beta psi_t[alpha])
     --------------------------------------------------------------
     Inputs:
-        Phi: (N_terms, N_terms) array
+        Phi: (N_alpha, N_beta) array
             Moment generating function evaluations
     Returns:
-        K_t: (N_terms,) array
+        K_t: (N_beta,) array
             Convolution kernel
     --------------------------------------------------------------
     """
-    L_t = Phi.prod(axis=0)  # (N_terms,) array
-    L_t_hat = jnp.fft.ifft(L_t)
-    K_t = jnp.fft.fft(jnp.reciprocal(L_t_hat))
-    return K_t
+    L_t = Phi.prod(axis=0)  # (N_beta,) array
+    L_t_hat = util.fourier_coeffs_to_evals(L_t)
+    K_t = util.evals_to_fourier_coeffs(jnp.reciprocal(L_t_hat))
+    # TODO: make dimensionality
+    return 2 * jnp.pi * K_t
 
 
 def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
-    """
-    Calculate D_{alpha,beta} = -i * beta * Phi'_alpha(-beta psi_t[alpha]) Prod_{gamma != alpha} Phi_gamma(-beta psi_t[gamma])
+    r"""
+    Calculate $D_{alpha,beta} = -i * \beta * \Phi^\prime_\alpha(-\beta \psi_t[\alpha]) \prod_{\gamma != alpha} Phi_gamma(-\beta \psi_t[\gamma])$
     -----------------------------------------------
     Warning:
     --------
     Indexing is flipped compared to paper notation!
     ------------------------------------------------
     Args:
-        Phi: (alpha, beta) array
-        Phi_prime: (alpha, beta) array
+        Phi: (N_alpha, N_beta) array
+        Phi_prime: (N_alpha, N_beta) array
     Returns:
-        D: (alpha, beta) array
+        D: (N_alpha, N_beta) array
     """
-    return -1j * Phi_prime / Phi * Phi.prod(axis=0)[None, :]
+    return -1j * Phi_prime * Phi.prod(axis=0)[None, :] / Phi
 
 
 def calculate_C(
@@ -99,43 +99,47 @@ def calculate_C(
     --------------------------------------------------------------
     Inputs:
     -------
-    Phi: (N_terms, N_terms) array
+    Phi: (N_alpha, N_beta) array
         Moment generating function evaluations with signature
         Phi[alpha, beta] = \Phi_alpha(-beta psi_t[alpha])
-    Phi_prime: (N_terms, N_terms) array
+    Phi_prime: (N_alpha, N_beta) array
         First derivatives of moment generating function evaluations and signature as above.
-    Phi_prime_prime: (N_terms, N_terms) array
+    Phi_prime_prime: (N_alpha, N_beta) array
         Second derivatives of moment generating function evaluations and signature as above.
-    D_tens: (N_terms, N_terms) array
+    D_tens: (N_alpha, N_beta) array
         D_{alpha,beta} tensor
-    K: (N_terms,) array
-        Convolution kernel
+    K: (N_beta,) array
+        K_{beta}Convolution kernel
     Returns:
     --------
-    C: (N_terms, N_terms, N_terms) array
+    C: (N_alpha, N_beta, N_alpha) array
         C_{alpha,beta,gamma} tensor
     --------------------------------------------------------------
     """
-    N_terms = D_tens.shape[0]
-    phi_prod = Phi.prod(axis=0)
-
-    ratio_1 = Phi_prime / Phi
     eltype = Phi.dtype
-    C = jnp.einsum(
-        "ab,gb,b->abg", ratio_1, ratio_1, phi_prod, preferred_element_type=eltype
+    phi_prod = Phi.prod(axis=0)
+    diff1_ratio = Phi_prime / Phi
+    diff2_ratio = Phi_prime_prime / Phi
+
+    convolve_term = convolve_tensors(D_tens, K_tens, D_tens)
+
+    alpha_v = jnp.arange(Phi.shape[0])
+    beta_v = jnp.arange(Phi.shape[1])
+
+    diff1_term = jnp.einsum(
+        "ab,gb,b->abg",
+        diff1_ratio,
+        diff1_ratio,
+        phi_prod,
+        preferred_element_type=eltype,
     )
+    diff1_term = diff1_term.at[alpha_v, :, alpha_v].set(0.0)
+    diff2_term = diff2_ratio * phi_prod[jnp.newaxis]
 
-    # Terms where alpha == gamma
-    idx = jnp.arange(N_terms)
-    ratio_2 = Phi_prime_prime / Phi
-    C = C.at[idx, :, idx].set(-ratio_2 * phi_prod[None, :])
+    combine_terms = diff1_term - convolve_term
+    combine_terms = combine_terms.at[alpha_v, :, alpha_v].subtract(diff2_term)
 
-    # Add convolutional term
-    C = C - convolve_tensors(D_tens, K_tens, D_tens)
-
-    # DO NOT FORGET -i*beta factor!
-    beta_s = jnp.arange(Phi.shape[0], dtype=eltype)
-    return 1j * beta_s[None, :, None] * C
+    return 1j * beta_v[jnp.newaxis, :, jnp.newaxis] * combine_terms
 
 
 def OptimalInterpPDEResidualPt(
@@ -155,140 +159,19 @@ def OptimalInterpPDEResidualPt(
     """
     Phi, Phi_prime, Phi_prime_prime = phi.evaluate(psi_t)
     eltype = Phi.dtype
+    # Convert to complexes
+    psi_t = psi_t.astype(eltype)
+    psi_dot_t = psi_dot_t.astype(eltype)
+    psi_diff2_t = psi_diff2_t.astype(eltype)
     D_tens = calculate_D(Phi, Phi_prime)
     K_tens = calculate_K(Phi)
     C_tens = calculate_C(Phi, Phi_prime, Phi_prime_prime, D_tens, K_tens)
-    rhs = jnp.einsum(
-        "abg,a,g->b", C_tens, psi_dot_t, psi_dot_t, preferred_element_type=eltype
-    )
-    lhs = jnp.einsum("ab,a->b", D_tens, psi_diff2_t, preferred_element_type=eltype)
+    rhs = jnp.einsum("abg,a,g->b", C_tens, psi_dot_t, psi_dot_t)
+    lhs = jnp.einsum("ab,a->b", D_tens, psi_diff2_t)
     return rhs - lhs
 
 
-__OptimalInterpPDEResidual_vmap = jax.vmap(
-    OptimalInterpPDEResidualPt, in_axes=(0, 0, 0, None)
-)
-
-
-def create_spline_residual(psi: SplineBasis, phi: MomentGeneratingPhi):
-    """
-    Create a residual function for a given spline basis
-
-    :param psi: Basis of spline functions
-    :type psi: SplineBasis
-    :param phi: Moment generating function
-    :type phi: MomentGeneratingPhi
-    """
-    evals, basis_diff1, basis_diff2 = psi.collocated_basis_transform()
-
-    def spline_residual(coeffs_psi, _):
-        # Assume a basis with T+2 knots (0,...,T+1), where t_0 = 0 and t_{T+1} = 1.
-        # Each col of coeffs_psi represents the coefficients for a given output.
-        # Each row of coeffs_psi represents a given spline function, i.e., col k represents spline centered at k/(T+1).
-        # dt_scale is the derivative operator on the coeffs_psi for this basis evaluated at the knots.
-        # dt_shift is the shift of the derivative operator to ensure boundary conditions are satisfied.
-        coeffs_psi_full = (
-            jnp.pad(coeffs_psi, ((1, 1), (1, 1)), mode="constant")
-            .at[[0, -1], [0, -1]]
-            .set(1.0)
-        )
-        psi = coeffs_psi_full  # Note that the splines are just the coeffs at collocation points
-        psi_dot = basis_diff1 @ coeffs_psi_full
-        psi_dot_dot = basis_diff2 @ coeffs_psi_full
-        residual = __OptimalInterpPDEResidual_vmap(psi, psi_dot, psi_dot_dot, phi)
-        return jnp.abs(residual)
-
-    return jax.jit(spline_residual)
-
-
-def pad_coeffs(
-    coeffs: Float[Array, "p-2 alpha"],
-    psi: AbstractLinearBasis,
-    fixed_orders: tuple[int, int],
-):
-    """
-    Pad the coefficients for a linear basis to ensure function satisfies boundary conditions
-
-    :param coeffs: Non-fixed coefficients
-    :type coeffs: Float[Array, "p-2 alpha"]
-    :param psi: Basis for coefficients
-    :type psi: AbstractLinearBasis
-    :param fixed_orders: Indices of coefficients are constrained
-    :type fixed_orders: tuple[int, int]
-    """
-    N_terms = coeffs.shape[1]
-    basis_eval = psi.evaluate_basis(jnp.zeros(2).at[1].set(1.0))
-    order0, order1 = fixed_orders
-    bc_scale = basis_eval[[0, 0, -1, -1], [order0, order1, order0, order1]].reshape(
-        2, 2
-    )
-    inv_bc_scale = jnp.linalg.inv(bc_scale)
-    bc_shift = jnp.zeros((2, N_terms)).at[[0, 1], [0, -1]].set(1.0)
-    first_coeffs = inv_bc_scale @ (bc_shift - (basis_eval[:, 2:] @ coeffs))
-    return jnp.concat((first_coeffs, coeffs))
-
-
-def create_collocated_basis_residual(
-    t_grid: Float[Array, " T"],
-    N_terms: int,
-    psi: AbstractLinearBasis,
-    phi: MomentGeneratingPhi,
-    fixed_orders: tuple[int, int],
-    wts: float | Float[Array, " T"] = 1.0,
-):
-    """
-    Create a residual using collocation. Assume that the first two elements of the linear basis are fixed to ensure boundary conditions.
-
-    :param t_grid: Grid of points to collocate
-    :type t_grid: Float[Array, "T"]
-    :param N_terms: Number of expansion terms
-    :type N_terms: int
-    :param psi: Basis for expansion terms
-    :type psi: AbstractLinearBasis
-    :param phi: Moment generation function
-    :type phi: MomentGeneratingPhi
-    :param fixed_orders: Indices of coefficients constrained by boundary conditions
-    :type fixed_orders: tuple[int, int]
-    :param wts: Optional weights for collocations
-    :type wts: float | Float[Array, " T"]
-    """
-    t_grid = jnp.sort(t_grid)
-    assert t_grid[0] == 0.0 and t_grid[-1] == 1.0  # Ensure grid is valid
-    # Evaluate basis
-    basis_eval, basis_diff1, basis_diff2 = psi.evaluate_basis_diff2(t_grid)
-    # Get the zero and first order basis at times t=0, t=1
-    order0, order1 = fixed_orders
-    assert order0 < order1
-    bc_scale = basis_eval[[0, 0, -1, -1], [order0, order1, order0, order1]].reshape(
-        2, 2
-    )
-    # Set the boundary conditions
-    inv_bc_scale = jnp.linalg.inv(bc_scale)
-    bc_shift = jnp.zeros((2, N_terms)).at[[0, 1], [0, -1]].set(1.0)
-    wts = jnp.reshape(wts, (-1, 1))
-
-    def basis_residual(coeffs_psi: Float[Array, "P alpha"], _):
-        # Get first two basis elements using boundary conditions
-        bdry_basis = basis_eval[jnp.array([0, -1])]
-        bdry_transform = jnp.concat(
-            (
-                bdry_basis[:, :order0],
-                bdry_basis[:, order0 + 1 : order1],
-                bdry_basis[:, order1 + 1 :],
-            ),
-            axis=1,
-        )
-        first_coeffs = inv_bc_scale @ (bc_shift - (bdry_transform @ coeffs_psi))
-        # Evaluate the basis and derivatives on full coefficient set
-        full_coeffs_psi = jnp.concat((first_coeffs, coeffs_psi))
-        psi = basis_eval @ full_coeffs_psi
-        psi_diff1 = basis_diff1 @ full_coeffs_psi
-        psi_diff2 = basis_diff2 @ full_coeffs_psi
-        # Evaluate the residual
-        residual = __OptimalInterpPDEResidual_vmap(psi, psi_diff1, psi_diff2, phi)
-        return wts * jnp.abs(residual)
-
-    return jax.jit(basis_residual)
+OptimalInterpPDEResidual = jax.vmap(OptimalInterpPDEResidualPt, in_axes=(0, 0, 0, None))
 
 
 def OptimalInterpBVP_ODE_RHS(

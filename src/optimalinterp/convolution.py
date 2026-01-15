@@ -75,7 +75,7 @@ def triple_circ_convolve_time(x, h, g):
 def triple_circ_convolve_freq(X, H, G):
     chex.assert_equal_shape((X, H))
     chex.assert_equal_shape((H, G))
-    x = jnp.fft.ifft(X)
-    h = jnp.fft.ifft(H)
-    g = jnp.fft.ifft(G)
-    return jnp.fft.fft(x * h * g)
+    x = jnp.fft.ifft(X, norm='forward')
+    h = jnp.fft.ifft(H, norm='forward')
+    g = jnp.fft.ifft(G, norm='forward')
+    return jnp.fft.fft(x * h * g, norm='forward')

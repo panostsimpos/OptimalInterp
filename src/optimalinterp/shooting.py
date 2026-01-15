@@ -1,5 +1,4 @@
-# %%
-from jaxtyping import Float, Array
+from jaxtyping import Float, Array, PyTree, Real
 import matplotlib.pyplot as plt
 import optimistix as optx
 import jax.numpy as jnp
@@ -8,12 +7,9 @@ import optimalinterp as oi
 import jax
 from typing import NamedTuple
 
-__all__ = ["OptimalInterpBVPSolution", "solve"]
+__all__ = ["OptimalInterpBVPShootingSolution", "solve"]
 
-jax.config.update("jax_enable_x64", True)
-
-
-class OptimalInterpBVPSolution(NamedTuple):
+class OptimalInterpBVPShootingSolution(NamedTuple):
     """Solution container for optimal interpolation BVP.
 
     Attributes:
@@ -34,7 +30,7 @@ class OptimalInterpBVPSolution(NamedTuple):
     solver_success: bool
 
 
-def rhs(t, y, args):
+def rhs(t: Real, y: PyTree[Float[Array, " 4*N"]], args: PyTree):
     r"""
     Simulate RHS of $\dot{y} = M(y)^{-1}f(y), where
     $$y = (re(\psi), re(\dot{\psi}), im(\psi), im(\dot{\psi}))$$
@@ -48,7 +44,7 @@ def rhs(t, y, args):
     return dy
 
 
-def shoot_once(psi_dot_0, *args, **solver_kwargs):
+def shoot_once(psi_dot_0: Float[Array, " N"], *args, **solver_kwargs) -> tuple[Float[Array, " 4*N"], diffrax.RESULTS]:
     r"Given $\dot{\psi}(0)$, return $\psi(1)$ satisfying ODE."
     psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
@@ -73,9 +69,9 @@ def shoot_once(psi_dot_0, *args, **solver_kwargs):
     )
 
 
-def residual(psi_dot_0, psi_1, *args, **solver_kwargs):
+def residual(psi_dot_0: Float[Array, " N"], psi_1: Float[Array, " N"], *args, **solver_kwargs):
     N_terms = len(psi_1)
-    # Recall that for an instation sol of diffrax.Solution the values sol.ys are of shape (time, y_dim)
+    # Recall that for an instantiation sol of diffrax.Solution the values sol.ys are of shape (time, y_dim)
     trajectory, _ = shoot_once(psi_dot_0, *args, **solver_kwargs)
     pred_y1_concat = trajectory[-1]
     # Recall that y1_concat = [psi_real, psi_dot_real, psi_imag, psi_dot_imag]
@@ -93,11 +89,12 @@ def solve(
     rtol: float = 1e-8,
     atol: float = 1e-8,
     max_solver_steps: int = 5000,
-    N_optimizer_steps: int = 1000,
+    max_optimizer_steps: int = 1000,
     verbose: bool = True,
     plot_solution: bool = True,
-    return_real_part: bool = True,
-) -> OptimalInterpBVPSolution:
+    only_return_real_part: bool = True,
+    solver: diffrax.AbstractSolver = diffrax.Kvaerno5(),
+) -> OptimalInterpBVPShootingSolution:
 
     term = diffrax.ODETerm(rhs)  # Create Diffrax term
 
@@ -107,7 +104,6 @@ def solve(
     psi_1 = z.at[-1].set(1.0)
 
     # ODE solve and optimization parameters
-    solver = diffrax.Kvaerno5()  # ODE time discretization
     solver_args = (Phi, D_infl)
     args = (psi_0, solver, term, solver_args)
 
@@ -128,7 +124,7 @@ def solve(
         return residual(psi_dot_0, psi_1, *args, **solver_kwargs)
 
     # Choose optimizer as Levenberg--Marquardt
-    solver = optx.BestSoFarLeastSquares(
+    optimizer = optx.BestSoFarLeastSquares(
         optx.LevenbergMarquardt(
             rtol=1e-8,
             atol=1e-8,
@@ -139,17 +135,17 @@ def solve(
     # Perform optimization
     opt_sol = optx.least_squares(
         residual_fcn,
-        solver,
+        optimizer,
         initial_psi_dot_0,
-        max_steps=N_optimizer_steps,
+        max_steps=max_optimizer_steps,
         throw=False,
     )
 
-    opt_obj_value = solver.norm(residual_fcn(opt_sol.value, None)).item()
+    opt_obj_value = optimizer.norm(residual_fcn(opt_sol.value, None)).item()
 
     if verbose:
         # Print optimization result and final residual
-        print("{},\n{}".format(opt_sol.result, opt_obj_value))
+        jax.debug.print("{},\n{}".format(opt_sol.result, opt_obj_value))
 
     # Get trajectory for the optimized value of $\dot{\psi}(0)$
     saveat_t = jnp.linspace(t_span[0], t_span[1], n_time_points)
@@ -157,7 +153,7 @@ def solve(
     ode_sol, ode_result = shoot_once(
         opt_sol.value, *args, saveat=saveat, **solver_kwargs
     )
-    if return_real_part:
+    if only_return_real_part:
         psi_t = ode_sol[:, :N_terms]
         psi_dot_t = ode_sol[:, N_terms : 2 * N_terms]
     else:
@@ -178,15 +174,16 @@ def solve(
         plt.xlabel("$t$")
         plt.legend()
         plt.show()
-
-    return OptimalInterpBVPSolution(
+    optimization_success = (opt_sol.result == optx.RESULTS.successful).item()
+    solver_success = (ode_result == diffrax.RESULTS.successful).item()
+    return OptimalInterpBVPShootingSolution(
         t=saveat_t,
         psi=psi_t,
         psi_dot=psi_dot_t,
         initial_velocity=opt_sol.value,
         residual_norm=opt_obj_value,
-        optimization_success=opt_sol.result == optx.RESULTS.successful,
-        solver_success=ode_result == diffrax.RESULTS.successful,
+        optimization_success=optimization_success,
+        solver_success=solver_success,
     )
 
 
@@ -195,7 +192,7 @@ def solve(
 if __name__ == "__main__":
     # Define test problem parameters
     N_terms = 5
-    Phi = oi.GaussianPhi1D(mu=2.0, sigma=4.0)
+    Phi = oi.GaussianPhi1D(N_terms, mu=2.0, sigma=4.0)
 
     # Solve BVP with shooting method
     print("Solving BVP with shooting method...")
@@ -210,7 +207,7 @@ if __name__ == "__main__":
         max_solver_steps=5000,
         verbose=True,
         plot_solution=True,
-        return_real_part=True,
+        only_return_real_part=True,
     )
     # %%
 

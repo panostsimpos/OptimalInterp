@@ -27,10 +27,10 @@ jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_debug_nans", True)
 
 # %%
-max_order, N_grid, N_terms = 24, 1025, 3
+max_order, N_grid, N_terms = 24, 1025, 5
 mu, sigma = 2., 4.
 psi = oi.basis.LinearBasis(max_order, 'chebyshev')
-phi = oi.moment_generator.GaussianPhi1D(mu, sigma)
+phi = oi.moment_generator.GaussianPhi1D(N_terms, mu, sigma)
 pts, wts = oi.util.clenshaw_curtis(N_grid)
 t_grid = jnp.sort(pts)
 t_wts = jnp.sqrt(wts)
@@ -38,7 +38,7 @@ t_grid = (t_grid - t_grid[0])/(t_grid[-1] - t_grid[0])
 fixed_orders = (0,1) # Fix the constant and linear function coefficients
 
 # %%
-residual = oi.ode_residual.create_collocated_basis_residual(t_grid, N_terms, psi, phi, fixed_orders, t_wts)
+residual = oi.basis.create_collocated_basis_residual(t_grid, N_terms, psi, phi, fixed_orders, t_wts, jnp.real)
 solver = optx.LevenbergMarquardt(
     rtol=1e-8, atol=1e-8, verbose=frozenset({"step", "accepted", "loss", "step_size"})
 )
@@ -48,7 +48,7 @@ y0 = jnp.zeros((psi.N_shap - 2, N_terms))
 residual(y0, None)
 
 # %%
-max_steps = 1000
+max_steps = 200
 sol = optx.least_squares(residual, solver, y0, throw=False, max_steps=max_steps)
 
 # %%
@@ -57,7 +57,7 @@ if not os.path.isdir('serial'):
 jnp.save(f"serial/coeffs_{time.time()}.npy", sol.value)
 
 # %%
-coeffs_psi = oi.ode_residual.pad_coeffs(sol.value, psi, fixed_orders)
+coeffs_psi = oi.basis.pad_coeffs(sol.value, psi, fixed_orders)
 eval_t_grid = jnp.arange(0,1001)/1000
 evals_basis_test, diff1_basis_test = psi.evaluate_basis_diff(eval_t_grid)
 evals_sol = evals_basis_test @ coeffs_psi
@@ -91,10 +91,12 @@ velocity_vmap = jax.vmap(
 x_min, x_max, N_X = -10, 10, 2001
 viz_x_grid = jnp.linspace(x_min, x_max, N_X)
 velocity_eval = velocity_vmap(viz_x_grid, evals_sol, diff1_sol)
-hm = plt.imshow(velocity_eval.T, extent=(0, 1, x_min, x_max), aspect=1/(x_max - x_min))
+hm = plt.imshow(velocity_eval[100:].T, extent=(eval_t_grid[100].item(), 1, x_min, x_max), aspect=1/(x_max - x_min))
 plt.plot(eval_t_grid, jnp.linspace(0, phi.mu, len(eval_t_grid)), color='k', linewidth=3, label=r"$\mu$")
 plt.xlabel('t')
 plt.ylabel('x')
 plt.colorbar(hm, label='v(t,x)')
 plt.legend()
 plt.show()
+
+# %%

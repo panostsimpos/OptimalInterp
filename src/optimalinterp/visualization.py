@@ -1,22 +1,26 @@
 # %%
 import matplotlib.pyplot as plt
-import optimistix as optx
 import jax.numpy as jnp
 from jaxtyping import Float, Array
 import jax
 import diffrax
-from optimalinterp.optimal_interpolant import OptimalInterpolant
+from optimalinterp.optimal_interpolant import ModalInterpolant, modal_interpolant_factory
 
-# %%
+__all__ = [
+    "visualize_interpolant_flow"
+]
+
 # =============================================================================
 # Generic binning-based velocity field computation
 # =============================================================================
 
+def make_extent(*args)->tuple[float, float, float, float]:
+    return tuple(a.item() for a in args)
 
 def compute_velocity(
-    interpolant: OptimalInterpolant,
+    interpolant: ModalInterpolant,
     key: jax.Array,
-    x_grid: Float[Array, "x_grid"],
+    x_grid: Float[Array, " X"],
     bin_width: Float,
     kernel_type: str = "gaussian",
     N_samples: int = 1000,
@@ -37,20 +41,13 @@ def compute_velocity(
     :return: velocity_field where velocity_field has shape (t_grid, x_grid).
     """
     # Compute X_t and dot{X}_t for all samples
-    Z_samples = interpolant.Z.sample(
-        N_samples=N_samples, key=key
-    )  # (N_samples, N_basis)
-    psi, psi_dot = interpolant.psi, interpolant.psi_dot  # (T, N_basis)
-    X_samples = Z_samples @ psi.T  # (N_samples, T)
-    Xdot_samples = Z_samples @ psi_dot.T  # (N_samples, T)
+    X_samples, Xdot_samples = interpolant.sample_solution_and_deriv(key, N_samples, None)
 
     if kernel_type == "gaussian":
-
         def kernel(x):
             return jnp.exp(-0.5 * (x) ** 2)
 
     elif kernel_type == "square":
-
         def kernel(x):
             return jnp.where(jnp.abs(x) <= 0.5, 1.0, 0.0)
 
@@ -59,16 +56,17 @@ def compute_velocity(
 
     # For each x in x_grid, find samples in bin and average Xdot
     def velocity_at_x_and_t(x, t_idx):
-
         distances = (X_samples[:, t_idx] - x) / bin_width
         weights = kernel(distances)
         weighted_sum = jnp.sum(weights * Xdot_samples[:, t_idx])
         weight_total = jnp.sum(weights)
         # Avoid division by zero
-        return jnp.where(weight_total > 1e-10, weighted_sum / weight_total, 0.0)
+        safe_weight_total = jnp.where(weight_total > 1e-10, weight_total, 1.)
+        return jnp.where(weight_total > 1e-14, weighted_sum / safe_weight_total, 0.0)
+
+    t_indices = jnp.arange(len(interpolant.default_tgrid()))
 
     # Shape (t_grid, x_grid)
-    t_indices = jnp.arange(len(interpolant.t))
     velocity_field = jax.vmap(
         lambda t_idx: jax.vmap(lambda x: velocity_at_x_and_t(x, t_idx))(x_grid)
     )(t_indices)
@@ -78,8 +76,8 @@ def compute_velocity(
 
 def plot_velocity_field(
     velocity_field: Float[Array, "t_grid x_grid"],
-    x_grid: Float[Array, "x_grid"],
-    t_grid: Float[Array, "t_grid"],
+    x_grid: Float[Array, " x_grid"],
+    t_grid: Float[Array, " t_grid"],
 ):
     """
     Plot the velocity field v(x,t).
@@ -95,7 +93,7 @@ def plot_velocity_field(
         velocity_field.T,
         aspect="auto",
         origin="lower",
-        extent=(t_grid[0], t_grid[-1], x_grid[0], x_grid[-1]),
+        extent=make_extent(t_grid[0], t_grid[-1], x_grid[0], x_grid[-1]),
         cmap="RdBu_r",
     )
     ax.set_xlabel("$t$")
@@ -109,10 +107,10 @@ def plot_velocity_field(
 def interpolate_velocity_field(
     t: float,
     x: float,
-    time_grid: Float[Array, "n_times"],
-    x_grid: Float[Array, "n_grid"],
+    time_grid: Float[Array, " n_times"],
+    x_grid: Float[Array, " n_grid"],
     velocity_field: Float[Array, "n_times n_grid"],
-) -> float:
+) -> Float[Array, "1"]:
     """
     Interpolate velocity field v(t, x) at arbitrary (t, x).
 
@@ -176,10 +174,10 @@ def particle_ode_rhs(t, X, args):
 
 def simulate_particle_trajectory(
     X0: float,
-    time_grid: Float[Array, "n_times"],
-    x_grid: Float[Array, "n_grid"],
+    time_grid: Float[Array, " n_times"],
+    x_grid: Float[Array, " n_grid"],
     velocity_field: Float[Array, "n_times n_grid"],
-) -> Float[Array, "n_times"]:
+) -> Float[Array, " n_times"]:
     """
     Simulate a single particle trajectory under velocity field.
 
@@ -207,15 +205,15 @@ def simulate_particle_trajectory(
         stepsize_controller=stepsize_controller,
         max_steps=10000,
     )
-
+    assert sol.ys is not None
     return sol.ys
 
 
 def plot_flow_field(
-    interpolant: OptimalInterpolant,
-    velocity_field: Float[Array, "t_grid x_grid"],
-    x_grid: Float[Array, "x_grid"],
-    t_grid: Float[Array, "t_grid"],
+    interpolant: ModalInterpolant,
+    velocity_field: Float[Array, "T X"],
+    x_grid: Float[Array, " X"],
+    t_grid: Float[Array, " T"],
     key: jax.Array,
     N_flow_samples: int = 20,
 ):
@@ -233,15 +231,13 @@ def plot_flow_field(
     """
 
     # Sample initial positions
-    X0_samples = interpolant(key, N_samples=N_flow_samples, t_eval=t_grid)[
-        :, 0
-    ]  # (N_flow_samples,)
+    X0_samples = interpolant.sample_modes(key, N_flow_samples)[:, 0]
 
     # Simulate all trajectories
     trajectories = []
     for i in range(N_flow_samples):
         traj = simulate_particle_trajectory(
-            X0_samples[i], t_grid, x_grid, velocity_field
+            X0_samples[i].item(), t_grid, x_grid, velocity_field
         )
         trajectories.append(traj)
 
@@ -271,7 +267,7 @@ def plot_flow_field(
         velocity_field.T,
         aspect="auto",
         origin="lower",
-        extent=(t_grid[0], t_grid[-1], x_grid[0], x_grid[-1]),
+        extent=make_extent(t_grid[0], t_grid[-1], x_grid[0], x_grid[-1]),
         cmap="RdBu_r",
         alpha=0.6,
     )
@@ -289,9 +285,9 @@ def plot_flow_field(
 
 
 def visualize_interpolant_flow(
-    interpolant: OptimalInterpolant,
+    interpolant: ModalInterpolant,
     key: jax.Array,
-    x_grid: Float[Array, "x_grid"],
+    x_grid: Float[Array, " X"],
     bin_width: Float = 0.01,
     kernel_type: str = "gaussian",
     N_velocity_samples: int = 1000,
@@ -307,7 +303,7 @@ def visualize_interpolant_flow(
         N_samples=N_velocity_samples,
     )
 
-    t_grid = interpolant.t
+    t_grid = interpolant.default_tgrid()
 
     # Plot velocity field
     plot_velocity_field(velocity_field, x_grid, t_grid)
@@ -323,27 +319,23 @@ def visualize_interpolant_flow(
     )
 
 
-# %%
 # =======================
 # Tests for this module
 # =======================
 
 if __name__ == "__main__":
     # Write some tests
-    from optimalinterp.stochastic_basis import GaussianBasis
+    from optimalinterp.stochastic_basis import GaussianConvolutionBasis
 
     # Enable 64-bit precision for accurate tests
     jax.config.update("jax_enable_x64", True)
 
-    # %% [markdown]
-    # # Visualization Module Tests
-    # %%
+    # Visualization Module Tests
 
-    simple_stochastic_basis = GaussianBasis(
+    simple_stochastic_basis = GaussianConvolutionBasis(
+        N_modes=2,
         mean=10.0,
         std_dev=2.0,
-        N_basis=2,
-        bridge_type="gaussian_convolution",
     )
 
     psi = jnp.array(
@@ -360,14 +352,15 @@ if __name__ == "__main__":
         ]
     ).T
 
-    test_interpolant = OptimalInterpolant(
+    test_interpolant = modal_interpolant_factory(
+        "time interpolated",
         t=jnp.linspace(0, 1, 100),  # 100 time points
         Z=simple_stochastic_basis,
+        psi=psi,
+        psi_dot=psi_dot
     )
-    test_interpolant = test_interpolant.with_psi(psi=psi)
-    test_interpolant = test_interpolant.with_psi_dot(psi_dot=psi_dot)
 
-    t_grid_test = test_interpolant.t
+    t_grid_test = test_interpolant.default_tgrid()
 
     # Plot sample paths of the standard interpolant
     n_paths = 50
@@ -378,7 +371,7 @@ if __name__ == "__main__":
     )  # Shape: (n_paths, n_times)
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    t_vals = test_interpolant.t
+    t_vals = test_interpolant.default_tgrid()
 
     for i in range(n_paths):
         ax.plot(t_vals, sample_paths[i, :], alpha=0.5, linewidth=1)
@@ -390,9 +383,7 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.show()
 
-    # %% [markdown]
-    # ## Test 1: Velocity Field Computation
-    # %%
+    # Test 1: Velocity Field Computation
     key_test = jax.random.PRNGKey(42)
     x_grid_test = jnp.linspace(-15, 15, 1000)
     bin_width_test = 0.01
@@ -423,7 +414,7 @@ if __name__ == "__main__":
     print(
         f"Expected shape: ({len(t_grid_test)}, {int((x_grid_test[1] - x_grid_test[0]) / bin_width_test)})"
     )
-    print(f"\nVelocity field stats (Gaussian):")
+    print( "\nVelocity field stats (Gaussian):")
     print(f"  Mean: {jnp.mean(velocity_field_gauss):.4f}")
     print(f"  Std: {jnp.std(velocity_field_gauss):.4f}")
     print(f"  Min: {jnp.min(velocity_field_gauss):.4f}")
@@ -438,41 +429,39 @@ if __name__ == "__main__":
     ), "Velocity field contains Inf values"
     print("\n✓ Velocity field computation successful (no NaN/Inf values)")
 
-    # %% [markdown]
-    # ## Test 2: Velocity Field Interpolation
+    # Test 2: Velocity Field Interpolation
     #
     # Test bilinear interpolation of velocity field at arbitrary points.
 
-    # %%
     # Test interpolation at grid points (should match original values)
-    t_mid = t_grid_test[len(t_grid_test) // 2]
-    x_mid = x_grid_test[len(x_grid_test) // 2]
+    t_mid = t_grid_test[len(t_grid_test) // 2].item()
+    x_mid = x_grid_test[len(x_grid_test) // 2].item()
 
     v_interp_grid = interpolate_velocity_field(
         t_mid, x_mid, t_grid_test, x_grid_test, velocity_field_gauss
     )
     v_original = velocity_field_gauss[len(t_grid_test) // 2, len(x_grid_test) // 2]
 
-    print(f"Interpolation at grid point:")
+    print( "Interpolation at grid point:")
     print(f"  Original value: {v_original:.6f}")
     print(f"  Interpolated value: {v_interp_grid:.6f}")
     print(f"  Difference: {abs(v_interp_grid - v_original):.2e}")
 
     # Test interpolation between grid points
-    t_between = (t_grid_test[5] + t_grid_test[6]) / 2
-    x_between = (x_grid_test[10] + x_grid_test[11]) / 2
+    t_between = ((t_grid_test[5] + t_grid_test[6]) / 2).item()
+    x_between = ((x_grid_test[10] + x_grid_test[11]) / 2).item()
 
     v_interp_between = interpolate_velocity_field(
         t_between, x_between, t_grid_test, x_grid_test, velocity_field_gauss
     )
 
-    print(f"\nInterpolation between grid points:")
+    print( "\nInterpolation between grid points:")
     print(f"  Interpolated value: {v_interp_between:.6f}")
-    print(f"  (Should be between neighboring values)")
+    print( "  (Should be between neighboring values)")
 
     # Test boundary handling
     v_boundary = interpolate_velocity_field(
-        t_grid_test[0], x_grid_test[0], t_grid_test, x_grid_test, velocity_field_gauss
+        t_grid_test[0].item(), x_grid_test[0].item(), t_grid_test, x_grid_test, velocity_field_gauss
     )
     print(f"\nBoundary interpolation: {v_boundary:.6f}")
 
@@ -481,12 +470,10 @@ if __name__ == "__main__":
     assert not jnp.isnan(v_boundary), "Boundary interpolation produced NaN"
     print("\n✓ Velocity field interpolation successful")
 
-    # %% [markdown]
-    # ## Test 3: Particle Trajectory Simulation
+    # Test 3: Particle Trajectory Simulation
     #
     # Test that particle trajectories are simulated correctly under the velocity field.
 
-    # %%
     X0_test = 0.0  # Start at origin
 
     trajectory = simulate_particle_trajectory(
@@ -495,7 +482,7 @@ if __name__ == "__main__":
 
     print(f"Particle trajectory shape: {trajectory.shape}")
     print(f"Expected shape: ({len(t_grid_test)},)")
-    print(f"\nTrajectory stats:")
+    print( "\nTrajectory stats:")
     print(f"  Initial position: {trajectory[0]:.4f}")
     print(f"  Final position: {trajectory[-1]:.4f}")
     print(f"  Position change: {trajectory[-1] - trajectory[0]:.4f}")
@@ -513,12 +500,10 @@ if __name__ == "__main__":
     assert trajectory.shape == (len(t_grid_test),), "Trajectory has incorrect shape"
     print("\n✓ Particle trajectory simulation successful")
 
-    # %% [markdown]
-    # ## Test 4: Multiple Particle Trajectories
+    # Test 4: Multiple Particle Trajectories
     #
     # Test simulation of multiple particles with different initial conditions.
 
-    # %%
     N_particles = 10
     key_particles = jax.random.PRNGKey(123)
     X0_samples_test = jax.random.uniform(
@@ -528,7 +513,7 @@ if __name__ == "__main__":
     trajectories_test = []
     for i in range(N_particles):
         traj = simulate_particle_trajectory(
-            X0_samples_test[i], t_grid_test, x_grid_test, velocity_field_gauss
+            X0_samples_test[i].item(), t_grid_test, x_grid_test, velocity_field_gauss
         )
         trajectories_test.append(traj)
 
@@ -552,12 +537,10 @@ if __name__ == "__main__":
     assert not jnp.any(jnp.isinf(trajectories_test)), "Some trajectories contain Inf"
     print("\n✓ Multiple particle trajectory simulation successful")
 
-    # %% [markdown]
-    # ## Test 5: Visualization Functions (Smoke Tests)
+    # Test 5: Visualization Functions (Smoke Tests)
     #
     # Test that plotting functions run without errors (visual inspection required).
 
-    # %%
     print("Testing velocity field plotting...")
     try:
         plot_velocity_field(velocity_field_gauss, x_grid_test, t_grid_test)
@@ -565,7 +548,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Velocity field plotting failed: {e}")
 
-    # %%
     print("\nTesting flow field plotting...")
     try:
         plot_flow_field(
@@ -580,12 +562,10 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Flow field plotting failed: {e}")
 
-    # %% [markdown]
-    # ## Test 6: Full Visualization Pipeline
+    # Test 6: Full Visualization Pipeline
     #
     # Test the complete visualization workflow with `visualize_interpolant_flow`.
 
-    # %%
     print("Testing complete visualization pipeline...")
     try:
         visualize_interpolant_flow(
@@ -601,12 +581,10 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Visualization pipeline failed: {e}")
 
-    # %% [markdown]
-    # ## Summary
+    # Summary
     #
     # All tests completed. Review the output above for any failures or warnings.
 
-    # %%
     print("\n" + "=" * 60)
     print("TEST SUITE SUMMARY")
     print("=" * 60)
@@ -620,5 +598,3 @@ if __name__ == "__main__":
     print("  6. Complete visualization pipeline")
     print("  7. Edge cases and boundary conditions")
     print("\nNote: Visual inspection of plots is required to verify correctness.")
-
-# %%

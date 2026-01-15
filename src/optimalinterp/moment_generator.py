@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import jax.numpy as jnp
-from jaxtyping import Array, Float, Complex, Array
+from jaxtyping import Array, Float, Complex
 from typing import Tuple
 import jax
 
@@ -10,6 +10,15 @@ __all__ = ["MomentGeneratingPhi", "GaussianPhi1D"]
 
 
 class MomentGeneratingPhi(ABC):
+    _N_outputs: int
+
+    def __init__(self, N_outputs: int):
+        self._N_outputs = N_outputs
+
+    @property
+    def N_outputs(self):
+        return self._N_outputs
+
     @abstractmethod
     def evaluate(self, psi_t: PsiT) -> Tuple[PhiTens, PhiTens, PhiTens]:
         """
@@ -20,51 +29,50 @@ class MomentGeneratingPhi(ABC):
 
 
 class GaussianPhi1D(MomentGeneratingPhi):
-    def __init__(self, mu: float, sigma: float):
+    def __init__(self, N_outputs: int, mu: float, sigma: float):
         r"""
-        Build MomentGeneratingPhi for 1D Gaussian example whwere we take
+        Build MomentGeneratingPhi for 1D Gaussian example where we take
         Z_0 ~ N(0, 1),
         Z_N ~ N(mu, sigma^2),
         Z_alpha = (1 - alpha/N) * N(0, 1) + (alpha/N) * N(mu,sigma^2)
         for alpha = 1, ..., N-1.
 
         Args:
+            N_outputs: Number of beta terms to take
             mu: Mean of Gaussian at final time.
             sigma: Standard deviation of Gaussian at final time.
         Outputs:
-            (Phi, Phi', Phi''): Each of shape (N_terms, N_terms) with signature
+            (Phi, Phi', Phi''): Each of shape (N_alpha, N_beta) with signature
                 Phi[alpha, beta] = \Phi_alpha(-beta psi_t[alpha])
                 and similarly for Phi' and Phi''.
         """
+        super().__init__(N_outputs)
         self.mu = mu
         self.sigma = sigma
 
     def evaluate(self, psi_t):
         # --------------------------------------------
-        # Convention: suffix _s to indicate arrays
+        # Convention: suffix _1 to indicate length N_terms
+        # Convention: suffix _2 to indicate length N_outputs
         # --------------------------------------------
         mu = self.mu
         sigma = self.sigma
-        N_terms = psi_t.shape[0]
-        N = N_terms - 1  # Want to index from 0 to N
-
-        alpha_s = jnp.arange(N + 1)
-        beta_s = jnp.arange(N + 1)  # Now we do as many DOFs as modes
-        eff_mu_s = mu / N * alpha_s
-        eff_sigma_s = (1.0 - alpha_s / N) ** 2 + alpha_s**2 / (N**2) * sigma**2
-        arg_s = -beta_s[None, :] * psi_t[:, None]
-        # Compute Phi, Phi', Phi'' using broadcasting
-        Phi_s = jnp.exp(
-            1j * eff_mu_s[:, None] * arg_s - 1 / 2 * arg_s**2 * eff_sigma_s[:, None]
+        N_outputs = self.N_outputs
+        N_alpha = psi_t.shape[0]
+        alpha_1 = jnp.linspace(0, 1, N_alpha)
+        beta_2 = jnp.arange(N_outputs)
+        phi_input_12 = -psi_t[:, jnp.newaxis] * beta_2[jnp.newaxis, :]
+        mean_term_1 = 1j * alpha_1 * mu
+        var_term_1 = jnp.square(1 - alpha_1) + jnp.square(sigma * alpha_1)
+        phi_eval_12 = jnp.exp(
+            mean_term_1[:,jnp.newaxis] * phi_input_12 - 0.5 *jnp.square(phi_input_12) * var_term_1[:,jnp.newaxis]
         )
-        Phi_prime_s = Phi_s * (1j * eff_mu_s[:, None] - eff_sigma_s[:, None] * arg_s)
-        Phi_double_prime_s = Phi_s * (
-            (1j * eff_mu_s[:, None] - eff_sigma_s[:, None] * arg_s) ** 2
-            - eff_sigma_s[:, None]
-        )
-        return (Phi_s, Phi_prime_s, Phi_double_prime_s)
+        phi_dot_prefix = mean_term_1[:,jnp.newaxis] - var_term_1[:,jnp.newaxis] * phi_input_12
+        phi_dot_12 = phi_dot_prefix * phi_eval_12
+        phi_ddot_12 = -var_term_1[:,jnp.newaxis] * phi_eval_12 + phi_dot_prefix * phi_dot_12
+        return (phi_eval_12, phi_dot_12, phi_ddot_12)
 
-    def sample(self, key: Array, num_samples: int) -> Float[Array, "num_samples"]:
+    def sample(self, key: Array, num_samples: int) -> Float[Array, " num_samples"]:
         r"""
         Sample from the Gaussian distribution defined by this moment generating function.
 

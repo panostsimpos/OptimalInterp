@@ -5,6 +5,7 @@ import optimalinterp as oi
 import numpy as np
 
 jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_debug_nans", True)
 FD_DELTA = 1e-6
 
 
