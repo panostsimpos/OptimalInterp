@@ -8,7 +8,7 @@ from typing import Optional
 
 class StochasticBasis(eqx.Module, ABC):
 
-    N_modes: eqx.AbstractVar[int]
+    N_modes: int
 
     @abstractmethod
     def sample(
@@ -28,10 +28,10 @@ class StochasticBasis(eqx.Module, ABC):
         pass
 
     @abstractmethod
-    def moment_generating_phi_builder(self, N_outputs: int) -> oi.moment_generator.MomentGeneratingPhi:
+    def moment_generating_phi_builder(self, max_beta_idx: int) -> oi.moment_generator.MomentGeneratingPhi:
         pass
 
-    def build_moment_generating_phi(self, N_outputs: Optional[int] = 0) -> oi.moment_generator.MomentGeneratingPhi:
+    def build_moment_generating_phi(self, max_beta_idx: Optional[int] = 0) -> oi.moment_generator.MomentGeneratingPhi:
         r"""
         Build the MomentGeneratingPhi object corresponding to this stochastic basis.
 
@@ -41,8 +41,8 @@ class StochasticBasis(eqx.Module, ABC):
         Returns:
             An instance of MomentGeneratingPhi.
         """
-        N_outputs_true = jax.lax.cond(N_outputs == 0, lambda: self.N_modes, lambda: N_outputs)
-        return self.moment_generating_phi_builder(N_outputs_true)
+        max_beta_idx_true = jax.lax.cond(max_beta_idx == 0, lambda: self.N_modes, lambda: max_beta_idx)
+        return self.moment_generating_phi_builder(max_beta_idx_true.item())
 
 
 class GaussianConvolutionBasis(StochasticBasis):
@@ -54,7 +54,7 @@ class GaussianConvolutionBasis(StochasticBasis):
     for alpha = 1, ..., N-1.
     """
 
-    N_modes: int = eqx.field()
+    N_modes: int
     mean: float
     std_dev: float
 
@@ -72,9 +72,9 @@ class GaussianConvolutionBasis(StochasticBasis):
         )  # Because diagonal, Cholesky is just sqrt of diag
         return samples
 
-    def moment_generating_phi_builder(self, N_outputs):
+    def moment_generating_phi_builder(self, max_beta_idx):
         return oi.moment_generator.GaussianConvolutionPhi1D(
-            N_outputs, mu=self.mean, sigma=self.std_dev
+            max_beta_idx, mu=self.mean, sigma=self.std_dev
         )
 
 class WrappedGaussianConvolutionBasis(StochasticBasis):
@@ -88,14 +88,16 @@ class WrappedGaussianConvolutionBasis(StochasticBasis):
 
     N_modes: int = eqx.field()
     max_period_idx: int
-    mean: float
-    std_dev: float
+    mean_0: float
+    std_dev_0: float
+    mean_1: float
+    std_dev_1: float
 
     def sample(self, key, N_samples):
         alpha_ratios = jnp.linspace(0, 1, self.N_modes)
-        mean_Z = alpha_ratios * self.mean
+        mean_Z = alpha_ratios * self.mean_1 + (1 - alpha_ratios) * self.mean_0
         Cov_Z = jnp.diag(
-            (1 - alpha_ratios) ** 2 + (alpha_ratios**2) * self.std_dev**2
+            ((1 - alpha_ratios) * self.std_dev_0) ** 2 + (alpha_ratios * self.std_dev_1)**2
         )  # Shape (N_basis, N_basis)
 
         base_randomness = jax.random.normal(
@@ -107,7 +109,8 @@ class WrappedGaussianConvolutionBasis(StochasticBasis):
         # Wrap around torus, accounting for pythonic modulo operation
         return jnp.where(toroidal < 0., 2*jnp.pi + toroidal, toroidal)
 
-    def moment_generating_phi_builder(self, N_outputs):
+    def moment_generating_phi_builder(self, max_beta_idx):
         return oi.moment_generator.WrappedGaussianConvolutionPhi1D(
-            self.N_modes, N_outputs, self.max_period_idx, mu=self.mean, sigma=self.std_dev
+            self.N_modes, max_beta_idx, self.max_period_idx,
+            self.mean_1, self.std_dev_1, self.mean_0, self.std_dev_0
         )

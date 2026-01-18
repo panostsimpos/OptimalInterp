@@ -67,7 +67,7 @@ def calculate_K(Phi: PhiTens) -> Fourier1Tens:
     L_t_hat = util.fourier_coeffs_to_evals(L_t)
     K_t = util.evals_to_fourier_coeffs(jnp.reciprocal(L_t_hat))
     # TODO: make dimensionality
-    return 2 * jnp.pi * K_t
+    return K_t
 
 
 def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
@@ -121,7 +121,7 @@ def calculate_C(
     diff1_ratio = Phi_prime / Phi
     diff2_ratio = Phi_prime_prime / Phi
 
-    convolve_term = convolve_tensors(D_tens, K_tens, D_tens)
+    convolve_term = -convolve_tensors(D_tens, K_tens, D_tens)
 
     alpha_v = jnp.arange(Phi.shape[0])
     beta_v = jnp.arange(Phi.shape[1])
@@ -129,13 +129,14 @@ def calculate_C(
     diff1_term = jnp.einsum(
         'ab,gb,b->abg', diff1_ratio, diff1_ratio, phi_prod, preferred_element_type=eltype
     )
-    diff1_term = diff1_term.at[alpha_v, :, alpha_v].set(0.)
+    diff1_term = -diff1_term.at[alpha_v, :, alpha_v].set(0.)
+
     diff2_term = diff2_ratio * phi_prod[jnp.newaxis]
 
-    combine_terms = diff1_term - convolve_term
-    combine_terms = combine_terms.at[alpha_v, :, alpha_v].subtract(diff2_term)
+    combine_terms = diff1_term + convolve_term
+    combine_terms = combine_terms.at[alpha_v, :, alpha_v].add(diff2_term)
 
-    return 1j * beta_v[jnp.newaxis, :, jnp.newaxis] * combine_terms
+    return beta_v[jnp.newaxis, :, jnp.newaxis] * combine_terms
 
 def OptimalInterpPDEResidualPt(
     psi_t: PsiT, psi_dot_t: PsiT, psi_diff2_t: PsiT, phi: MomentGeneratingPhi
