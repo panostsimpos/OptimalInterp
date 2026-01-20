@@ -33,8 +33,8 @@ trig_poly_euler_v = jax.vmap(trig_poly_euler, in_axes=(0, None))
 
 
 def trig_poly_coeffs_to_euler(sin_coeff, cos_coeff, constant_coeff):
-    # 2 sin(2pi i k x) = -i exp(2pi i k x) + i exp(2pi i (-k) x)
-    # 2 cos(2pi i k x) =    exp(2pi i k x) +   exp(2pi i (-k) x)
+    # 2 sin(2pi k x) = -i exp(2pi i k x) + i exp(2pi i (-k) x)
+    # 2 cos(2pi k x) =    exp(2pi i k x) +   exp(2pi i (-k) x)
     assert len(sin_coeff) == len(cos_coeff) and jnp.isscalar(constant_coeff)
     sin_coeff_eu = jnp.concat((1j * sin_coeff[::-1], jnp.array([0.0]), -1j * sin_coeff))
     cos_coeff_eu = jnp.concat((cos_coeff[::-1], jnp.array([0.0]), cos_coeff))
