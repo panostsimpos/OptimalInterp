@@ -2,28 +2,35 @@ import pytest
 import jax
 import jax.numpy as jnp
 import optimalinterp as oi
+
 jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_debug_nans", True)
 
-def test_circ_convolution():
-    pass
 
 def trig_poly(x, sin_coeff, cos_coeff, constant_coeff):
-    sin_terms = jnp.dot(sin_coeff, jnp.sin(2 * jnp.pi * jnp.arange(1,1+len(sin_coeff)) * x))
-    cos_terms = jnp.dot(cos_coeff, jnp.cos(2 * jnp.pi * jnp.arange(1,1+len(cos_coeff)) * x))
+    sin_terms = jnp.dot(
+        sin_coeff, jnp.sin(2 * jnp.pi * jnp.arange(1, 1 + len(sin_coeff)) * x)
+    )
+    cos_terms = jnp.dot(
+        cos_coeff, jnp.cos(2 * jnp.pi * jnp.arange(1, 1 + len(cos_coeff)) * x)
+    )
     return sin_terms + cos_terms + constant_coeff
+
 
 def trig_poly_euler(x, all_coeff):
     assert len(all_coeff) % 2 == 1
     max_idx = len(all_coeff) // 2
-    return jnp.dot(all_coeff, jnp.exp(2j * jnp.pi * x * jnp.arange(-max_idx, max_idx + 1)))
+    return jnp.dot(
+        all_coeff, jnp.exp(2j * jnp.pi * x * jnp.arange(-max_idx, max_idx + 1))
+    )
     # sin_terms = jnp.dot(sin_coeff, jnp.sin(2 * jnp.pi * jnp.arange(1,1+len(sin_coeff)) * x))
     # cos_terms = jnp.dot(cos_coeff, jnp.cos(2 * jnp.pi * jnp.arange(1,1+len(cos_coeff)) * x))
     # return sin_terms + cos_terms + constant_coeff
 
 
-trig_poly_v = jax.vmap(trig_poly, in_axes=(0,None,None,None))
-trig_poly_euler_v = jax.vmap(trig_poly_euler, in_axes=(0,None))
+trig_poly_v = jax.vmap(trig_poly, in_axes=(0, None, None, None))
+trig_poly_euler_v = jax.vmap(trig_poly_euler, in_axes=(0, None))
+
 
 def trig_poly_coeffs_to_euler(sin_coeff, cos_coeff, constant_coeff):
     # 2 sin(2pi i k x) = -i exp(2pi i k x) + i exp(2pi i (-k) x)
@@ -39,8 +46,8 @@ def trig_poly_coeffs_to_euler(sin_coeff, cos_coeff, constant_coeff):
 def test_fourier_coeffs_util():
     # Test function: 1.3 + 2 sin(2 pi x) - 2 cos(4 pi x) + 6 * sin(6 pi x)
     constant_coeff = 1.3
-    sin_coeff = jnp.array([ 2,  0,  6])
-    cos_coeff = jnp.array([ 0, -2,  0])
+    sin_coeff = jnp.array([2, 0, 6])
+    cos_coeff = jnp.array([0, -2, 0])
     all_coeffs = trig_poly_coeffs_to_euler(sin_coeff, cos_coeff, constant_coeff)
     N = len(all_coeffs)
 
@@ -61,7 +68,7 @@ def test_fourier_coeffs_util_difficult():
     # cos_coeff = jnp.array([ 0, -2,  0])
     # all_coeffs = trig_poly_coeffs_to_euler(sin_coeff, cos_coeff, constant_coeff)
     max_idx = 7
-    N = 2*max_idx + 1
+    N = 2 * max_idx + 1
     key, subkey = jax.random.split(jax.random.key(0))
     all_coeffs = jax.random.normal(key, (N,)) + 1j * jax.random.normal(subkey, (N,))
 
