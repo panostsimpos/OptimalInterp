@@ -349,3 +349,104 @@ class TestTripleCircConvolveFreq:
             X1, H, G
         ) + b * conv.triple_circ_convolve_freq(X2, H, G)
         assert result_combined == pytest.approx(result_separate, rel=1e-12)
+
+
+class TestConvolveTensors:
+    """Tests for ode_res.convolve_tensors (vmapped triple convolution for tensor operations)."""
+
+    def test_output_shape(self):
+        """Output shape should be (N_alpha, N_beta, N_alpha)."""
+        N_alpha, N_beta = 3, 5
+        Tens1 = jnp.ones((N_alpha, N_beta), dtype=complex)
+        Kernel = jnp.ones(N_beta, dtype=complex)
+        Tens2 = jnp.ones((N_alpha, N_beta), dtype=complex)
+        result = ode_res.convolve_tensors(Tens1, Kernel, Tens2)
+        assert result.shape == (N_alpha, N_beta, N_alpha)
+
+    def test_symmetry_in_tensor_swap(self):
+        """Swapping Tens1 and Tens2 should transpose the alpha dimensions."""
+        N_alpha, N_beta = 3, 4
+        Tens1 = jnp.arange(N_alpha * N_beta, dtype=complex).reshape(N_alpha, N_beta)
+        Tens2 = (
+            jnp.arange(N_alpha * N_beta, dtype=complex).reshape(N_alpha, N_beta) + 1j
+        )
+        Kernel = jnp.ones(N_beta, dtype=complex) * 0.5
+        result_12 = ode_res.convolve_tensors(Tens1, Kernel, Tens2)
+        result_21 = ode_res.convolve_tensors(Tens2, Kernel, Tens1)
+        # Swapping Tens1 and Tens2 should swap the first and third axes
+        assert result_12 == pytest.approx(
+            jnp.transpose(result_21, (2, 1, 0)), rel=1e-12
+        )
+
+    def test_linearity_in_first_tensor(self):
+        """convolve_tensors is linear in Tens1."""
+        N_alpha, N_beta = 2, 4
+        Tens1_a = jnp.arange(N_alpha * N_beta, dtype=complex).reshape(N_alpha, N_beta)
+        Tens1_b = (
+            jnp.arange(N_alpha * N_beta, dtype=complex).reshape(N_alpha, N_beta) * 0.5j
+        )
+        Tens2 = jnp.ones((N_alpha, N_beta), dtype=complex) + 0.1j
+        Kernel = jnp.array([1.0, -0.5, 0.25, 0.1], dtype=complex)
+        a, b = 2.0 + 0.5j, -1.0 + 0.3j
+        result_combined = ode_res.convolve_tensors(
+            a * Tens1_a + b * Tens1_b, Kernel, Tens2
+        )
+        result_separate = a * ode_res.convolve_tensors(
+            Tens1_a, Kernel, Tens2
+        ) + b * ode_res.convolve_tensors(Tens1_b, Kernel, Tens2)
+        assert result_combined == pytest.approx(result_separate, rel=1e-12)
+
+    def test_linearity_in_kernel(self):
+        """convolve_tensors is linear in Kernel."""
+        N_alpha, N_beta = 2, 4
+        Tens1 = jnp.arange(N_alpha * N_beta, dtype=complex).reshape(N_alpha, N_beta)
+        Tens2 = jnp.ones((N_alpha, N_beta), dtype=complex) + 0.1j
+        Kernel_a = jnp.array([1.0, -0.5, 0.25, 0.1], dtype=complex)
+        Kernel_b = jnp.array([0.5, 0.5, -0.5, 0.2], dtype=complex)
+        a, b = 2.0, -1.5
+        result_combined = ode_res.convolve_tensors(
+            Tens1, a * Kernel_a + b * Kernel_b, Tens2
+        )
+        result_separate = a * ode_res.convolve_tensors(
+            Tens1, Kernel_a, Tens2
+        ) + b * ode_res.convolve_tensors(Tens1, Kernel_b, Tens2)
+        assert result_combined == pytest.approx(result_separate, rel=1e-12)
+
+    def test_single_element_tensors(self):
+        """Test with minimal 1x1 tensors to verify basic operation."""
+        Tens1 = jnp.array([[2.0 + 1j]])
+        Tens2 = jnp.array([[3.0 - 1j]])
+        Kernel = jnp.array([0.5 + 0.5j])
+        result = ode_res.convolve_tensors(Tens1, Kernel, Tens2)
+        # For 1x1: result[0,0,0] = triple_circ_convolve_freq(Tens1[0,:], Kernel, Tens2[0,:])
+        expected_val = conv.triple_circ_convolve_freq(Tens1[0, :], Kernel, Tens2[0, :])
+        assert result[0, 0, 0] == pytest.approx(expected_val[0], rel=1e-12)
+
+    def test_consistency_with_triple_convolve_freq(self):
+        """Each slice should match direct call to triple_circ_convolve_freq."""
+        N_alpha, N_beta = 2, 4
+        Tens1 = jnp.arange(N_alpha * N_beta, dtype=complex).reshape(N_alpha, N_beta)
+        Tens2 = (
+            jnp.arange(N_alpha * N_beta, dtype=complex).reshape(N_alpha, N_beta) * 0.5
+            + 0.1j
+        )
+        Kernel = jnp.array([1.0, -0.5, 0.25, 0.1], dtype=complex)
+        result = ode_res.convolve_tensors(Tens1, Kernel, Tens2)
+        # Check individual elements by direct computation
+        for alpha in range(N_alpha):
+            for gamma in range(N_alpha):
+                expected = conv.triple_circ_convolve_freq(
+                    Tens1[alpha, :], Kernel, Tens2[gamma, :]
+                )
+                assert result[alpha, :, gamma] == pytest.approx(expected, rel=1e-12)
+
+    def test_zero_kernel(self):
+        """Zero kernel should give zero output."""
+        N_alpha, N_beta = 2, 4
+        Tens1 = jnp.arange(N_alpha * N_beta, dtype=complex).reshape(N_alpha, N_beta)
+        Tens2 = jnp.ones((N_alpha, N_beta), dtype=complex)
+        Kernel = jnp.zeros(N_beta, dtype=complex)
+        result = ode_res.convolve_tensors(Tens1, Kernel, Tens2)
+        assert result == pytest.approx(
+            jnp.zeros((N_alpha, N_beta, N_alpha), dtype=complex), abs=1e-14
+        )
