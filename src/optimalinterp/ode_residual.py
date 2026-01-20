@@ -28,7 +28,7 @@ def convolve_tensors(
     Tens1: Fourier2Tens,
     Kernel: Fourier1Tens,
     Tens2: Fourier2Tens,
-) -> Fourier2Tens:
+) -> Fourier3Tens:
     """
     Compute the convolution of the D tensor and the K kernel.
     Circular convolution must be used here.
@@ -72,7 +72,7 @@ def calculate_K(Phi: PhiTens) -> Fourier1Tens:
 
 def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
     r"""
-    Calculate $D_{alpha,beta} = -i * \beta * \Phi^\prime_\alpha(-\beta \psi_t[\alpha]) \prod_{\gamma != alpha} Phi_gamma(-\beta \psi_t[\gamma])$
+    Calculate $D_{alpha,beta} = \Phi^\prime_\alpha(-\beta \psi_t[\alpha]) \prod_{\gamma != alpha} Phi_gamma(-\beta \psi_t[\gamma])$
     -----------------------------------------------
     Warning:
     --------
@@ -84,7 +84,7 @@ def calculate_D(Phi: PhiTens, Phi_prime: PhiTens) -> Fourier2Tens:
     Returns:
         D: (N_alpha, N_beta) array
     """
-    return -1j * Phi_prime * Phi.prod(axis=0)[None, :] / Phi
+    return Phi_prime * Phi.prod(axis=0)[None, :] / Phi
 
 
 def calculate_C(
@@ -133,7 +133,9 @@ def calculate_C(
         phi_prod,
         preferred_element_type=eltype,
     )
+    diff1_term = -diff1_term
     diff1_term = diff1_term.at[alpha_v, :, alpha_v].set(0.0)
+
     diff2_term = diff2_ratio * phi_prod[jnp.newaxis]
 
     combine_terms = diff1_term + convolve_term
