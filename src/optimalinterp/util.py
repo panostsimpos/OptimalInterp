@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 from jaxtyping import Float, Array
 
@@ -33,3 +34,21 @@ def evals_to_fourier_coeffs(eval_pts: Float[Array, " N"]):
     where $ x_j = 2\pi (j-1) / N $
     """
     return jnp.fft.fft(eval_pts, norm='forward')
+
+def sinc_eval(x: Float[Array, "*"]):
+    return jnp.sinc(x)
+
+def sinc_diff(x: Float[Array, "*"]):
+    safe_x = jnp.where(x == 0., 1., x * jnp.pi)
+    eval = jnp.sinc(x)
+    diff = jnp.pi * (jnp.cos(safe_x) - eval) / safe_x
+    return eval, jnp.where(x == 0, 0., diff)
+
+def sinc_diff2(x: Float[Array, "*"]):
+    safe_x = jnp.where(x == 0., 1., x * jnp.pi)
+    eval = jnp.sinc(x)
+    diff = jnp.pi * (jnp.cos(safe_x) - eval) / safe_x
+    diff = jnp.where(x == 0, 0., diff)
+    diff2 = -eval + 2 * (jnp.sin(safe_x) - safe_x * jnp.cos(safe_x)) / (safe_x**3)
+    diff2 = jnp.where(x == 0, -1/3, diff2)
+    return eval, diff, diff2 * jnp.pi * jnp.pi
