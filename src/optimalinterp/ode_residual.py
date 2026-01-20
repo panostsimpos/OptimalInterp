@@ -124,7 +124,13 @@ def calculate_C(
     convolve_term = -convolve_tensors(D_tens, K_tens, D_tens)
 
     alpha_v = jnp.arange(Phi.shape[0])
-    beta_v = jnp.arange(Phi.shape[1])
+    # β ranges from -max_beta_idx to +max_beta_idx (centered at 0)
+    N_beta = Phi.shape[1]
+    max_beta_idx = N_beta // 2
+    if N_beta % 2 == 1:  # odd
+        beta_v = jnp.arange(-max_beta_idx, max_beta_idx + 1)
+    else:  # even
+        beta_v = jnp.arange(-max_beta_idx, max_beta_idx)
 
     diff1_term = jnp.einsum(
         "ab,gb,b->abg",
