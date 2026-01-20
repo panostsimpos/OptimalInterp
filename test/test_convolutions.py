@@ -90,15 +90,15 @@ class TestCircConvolveTime:
         H = jnp.fft.fft(h)
         assert Y == pytest.approx(X * H, rel=1e-12)
 
-    def convolutuon_with_non_trivial_function(self):
+    def test_convolutuon_with_non_trivial_function(self):
         "Compute convolution with exp(i * 2 pi k x) and verify result."
         N = 4
         k = 3
         xgrid = jnp.arange(N)
         freq_func = jnp.exp(1j * 2 * jnp.pi * k * xgrid)
         # Kernel: delta function at index k
-        x = jnp.zeros([1.0, -3.0 + 1j, 5.0, 2.0])
-        kernel = jnp.ifft(freq_func)
+        x = jnp.array([1.0, -3.0 + 1j, 5.0, 2.0])
+        kernel = jnp.fft.ifft(freq_func)
         result_conv = conv.circ_convolve_time(x, kernel)
         result_freq = jnp.fft.fft(x) * freq_func
         result_conv_freq = jnp.fft.fft(result_conv)
