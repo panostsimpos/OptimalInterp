@@ -210,3 +210,142 @@ class TestTimFreqDuality:
         Y_freq = X * H
         y_from_freq = jnp.fft.ifft(Y_freq)
         assert y_time == pytest.approx(y_from_freq, rel=1e-12)
+
+
+class TestTripleCircConvolveTime:
+    """Tests for conv.triple_circ_convolve_time (triple circular convolution in time domain)."""
+
+    def test_impulse_identity(self):
+        """Convolving with two impulses [1,0,0,...] returns the original signal."""
+        N = 8
+        x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        impulse = jnp.zeros(N).at[0].set(1.0)
+        result = conv.triple_circ_convolve_time(x, impulse, impulse)
+        assert result == pytest.approx(x, rel=1e-12)
+
+    def test_reduces_to_double_convolution(self):
+        """Triple convolution with impulse as third arg reduces to double convolution."""
+        x = jnp.array([1.0, 2.0, 3.0, 4.0])
+        h = jnp.array([0.5, -0.5, 0.25, 0.1])
+        impulse = jnp.zeros(4).at[0].set(1.0)
+        result_triple = conv.triple_circ_convolve_time(x, h, impulse)
+        result_double = conv.circ_convolve_time(x, h)
+        assert result_triple == pytest.approx(result_double, rel=1e-12)
+
+    def test_commutativity_all_permutations(self):
+        """Triple circular convolution is commutative across all argument permutations."""
+        x = jnp.array([1.0, 2.0, 3.0, 4.0])
+        h = jnp.array([0.5, -0.5, 0.25, 0.1])
+        g = jnp.array([0.1, 0.2, -0.1, 0.3])
+        # All 6 permutations should give same result
+        result_xhg = conv.triple_circ_convolve_time(x, h, g)
+        result_xgh = conv.triple_circ_convolve_time(x, g, h)
+        result_hxg = conv.triple_circ_convolve_time(h, x, g)
+        result_hgx = conv.triple_circ_convolve_time(h, g, x)
+        result_gxh = conv.triple_circ_convolve_time(g, x, h)
+        result_ghx = conv.triple_circ_convolve_time(g, h, x)
+        assert result_xhg == pytest.approx(result_xgh, rel=1e-12)
+        assert result_xhg == pytest.approx(result_hxg, rel=1e-12)
+        assert result_xhg == pytest.approx(result_hgx, rel=1e-12)
+        assert result_xhg == pytest.approx(result_gxh, rel=1e-12)
+        assert result_xhg == pytest.approx(result_ghx, rel=1e-12)
+
+    def test_associativity_with_double(self):
+        """Triple conv equals sequential double convolutions: (x*h)*g = x*h*g."""
+        x = jnp.array([1.0, 2.0, 3.0, 4.0])
+        h = jnp.array([0.5, -0.5, 0.25, 0.1])
+        g = jnp.array([0.1, 0.2, -0.1, 0.3])
+        result_triple = conv.triple_circ_convolve_time(x, h, g)
+        result_sequential = conv.circ_convolve_time(conv.circ_convolve_time(x, h), g)
+        assert result_triple == pytest.approx(result_sequential, rel=1e-12)
+
+    def test_frequency_domain_equivalence(self):
+        """FFT of triple time conv equals product of FFTs."""
+        x = jnp.array([1.0, 2.0, 3.0, 4.0])
+        h = jnp.array([0.5, -0.5, 0.25, 0.1])
+        g = jnp.array([0.1, 0.2, -0.1, 0.3])
+        result = conv.triple_circ_convolve_time(x, h, g)
+        result_fft = jnp.fft.fft(result)
+        expected_fft = jnp.fft.fft(x) * jnp.fft.fft(h) * jnp.fft.fft(g)
+        assert result_fft == pytest.approx(expected_fft, rel=1e-12)
+
+    def test_complex_arrays(self):
+        """Triple convolution works with complex arrays."""
+        x = jnp.array([1.0 + 1j, 2.0 - 1j, 3.0 + 0j, 4.0 - 2j])
+        h = jnp.array([0.5 + 0.5j, -0.5 + 0j, 0.25 - 0.25j, 0.0 + 0.1j])
+        g = jnp.array([0.1 - 0.1j, 0.2 + 0.2j, -0.1 + 0j, 0.3 - 0.3j])
+        result = conv.triple_circ_convolve_time(x, h, g)
+        # Verify via FFT relationship
+        expected_fft = jnp.fft.fft(x) * jnp.fft.fft(h) * jnp.fft.fft(g)
+        result_fft = jnp.fft.fft(result)
+        assert result_fft == pytest.approx(expected_fft, rel=1e-12)
+
+    def test_linearity(self):
+        """Triple convolution is linear in each argument."""
+        x1 = jnp.array([1.0, 2.0, 3.0, 4.0])
+        x2 = jnp.array([0.5, -0.5, 1.0, -1.0])
+        h = jnp.array([0.5, -0.5, 0.25, 0.1])
+        g = jnp.array([0.1, 0.2, -0.1, 0.3])
+        a, b = 2.0, -3.0
+        result_combined = conv.triple_circ_convolve_time(a * x1 + b * x2, h, g)
+        result_separate = a * conv.triple_circ_convolve_time(
+            x1, h, g
+        ) + b * conv.triple_circ_convolve_time(x2, h, g)
+        assert result_combined == pytest.approx(result_separate, rel=1e-12)
+
+
+class TestTripleCircConvolveFreq:
+    """Tests for conv.triple_circ_convolve_freq (triple circular convolution in frequency domain)."""
+
+    def test_commutativity_all_permutations(self):
+        """Triple frequency-domain convolution is commutative across all permutations."""
+        X = jnp.fft.fft(jnp.array([1.0, 2.0, 3.0, 4.0]))
+        H = jnp.fft.fft(jnp.array([0.5, -0.5, 0.25, 0.1]))
+        G = jnp.fft.fft(jnp.array([0.1, 0.2, -0.1, 0.3]))
+        result_XHG = conv.triple_circ_convolve_freq(X, H, G)
+        result_XGH = conv.triple_circ_convolve_freq(X, G, H)
+        result_HXG = conv.triple_circ_convolve_freq(H, X, G)
+        result_HGX = conv.triple_circ_convolve_freq(H, G, X)
+        result_GXH = conv.triple_circ_convolve_freq(G, X, H)
+        result_GHX = conv.triple_circ_convolve_freq(G, H, X)
+        assert result_XHG == pytest.approx(result_XGH, rel=1e-12)
+        assert result_XHG == pytest.approx(result_HXG, rel=1e-12)
+        assert result_XHG == pytest.approx(result_HGX, rel=1e-12)
+        assert result_XHG == pytest.approx(result_GXH, rel=1e-12)
+        assert result_XHG == pytest.approx(result_GHX, rel=1e-12)
+
+    def test_time_domain_equivalence(self):
+        """Frequency triple conv corresponds to pointwise time-domain triple product."""
+        X = jnp.array([1.0 + 0j, 2.0 - 1j, 3.0 + 2j, 4.0 - 0.5j])
+        H = jnp.array([0.5 + 0.5j, -0.5 + 1j, 0.25 - 0.25j, 0.1 + 0.2j])
+        G = jnp.array([0.1 - 0.1j, 0.2 + 0.3j, -0.1 - 0.1j, 0.3 + 0j])
+        result = conv.triple_circ_convolve_freq(X, H, G)
+        # With norm='forward': ifft has no normalization, fft has 1/N
+        x = jnp.fft.ifft(X, norm="forward")
+        h = jnp.fft.ifft(H, norm="forward")
+        g = jnp.fft.ifft(G, norm="forward")
+        expected = jnp.fft.fft(x * h * g, norm="forward")
+        assert result == pytest.approx(expected, rel=1e-12)
+
+    def test_complex_arrays(self):
+        """Frequency triple convolution works with complex arrays."""
+        X = jnp.array([1.0 + 1j, 2.0 - 1j, 3.0 + 0j, 4.0 - 2j])
+        H = jnp.array([0.5 + 0.5j, -0.5 + 0j, 0.25 - 0.25j, 0.0 + 0.1j])
+        G = jnp.array([0.1 - 0.2j, 0.2 + 0.1j, -0.1 + 0.3j, 0.3 - 0.1j])
+        # Verify commutativity as a sanity check
+        result_XHG = conv.triple_circ_convolve_freq(X, H, G)
+        result_GHX = conv.triple_circ_convolve_freq(G, H, X)
+        assert result_XHG == pytest.approx(result_GHX, rel=1e-12)
+
+    def test_linearity(self):
+        """Frequency triple convolution is linear in each argument."""
+        X1 = jnp.fft.fft(jnp.array([1.0, 2.0, 3.0, 4.0]))
+        X2 = jnp.fft.fft(jnp.array([0.5, -0.5, 1.0, -1.0]))
+        H = jnp.fft.fft(jnp.array([0.5, -0.5, 0.25, 0.1]))
+        G = jnp.fft.fft(jnp.array([0.1, 0.2, -0.1, 0.3]))
+        a, b = 2.0, -3.0
+        result_combined = conv.triple_circ_convolve_freq(a * X1 + b * X2, H, G)
+        result_separate = a * conv.triple_circ_convolve_freq(
+            X1, H, G
+        ) + b * conv.triple_circ_convolve_freq(X2, H, G)
+        assert result_combined == pytest.approx(result_separate, rel=1e-12)
