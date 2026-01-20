@@ -3,12 +3,14 @@ import pytest
 import jax
 import jax.numpy as jnp
 import numpy as np
+
 jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_debug_nans", True)
 
+
 def test_D_K_C_tensor_shape():
     N_alpha, max_beta_idx = 5, 7
-    N_beta = 2*max_beta_idx + 1
+    N_beta = 2 * max_beta_idx + 1
     mu = 1.0
     sigma = 2.0
     phi = oi.GaussianConvolutionPhi1D(max_beta_idx, mu, sigma)
@@ -18,15 +20,15 @@ def test_D_K_C_tensor_shape():
     assert D_tens.shape == (N_alpha, N_beta)
     K = oi.ode_residual.calculate_K(Phi)
     assert K.shape == (N_beta,)
-    C_tens = oi.ode_residual.calculate_C(
-        Phi, Phi_prime, Phi_prime_prime, D_tens, K)
+    C_tens = oi.ode_residual.calculate_C(Phi, Phi_prime, Phi_prime_prime, D_tens, K)
     assert C_tens.shape == (N_alpha, N_beta, N_alpha)
+
 
 def simple_dft(v, direction: str):
     inv_f_v = np.zeros_like(v)
-    if direction.startswith('i'):
+    if direction.startswith("i"):
         sign = 1
-    elif direction.startswith('f'):
+    elif direction.startswith("f"):
         sign = -1
     else:
         raise ValueError()
@@ -36,9 +38,10 @@ def simple_dft(v, direction: str):
             inv_f_v[x_idx] += v[beta] * np.exp(1j * sign * 2 * np.pi * beta / len(v))
     return jnp.array(inv_f_v)
 
+
 def test_K_kernel():
     N_terms = 5
-    N_beta = 2*N_terms + 1
+    N_beta = 2 * N_terms + 1
     mu = 1.0
     sigma = 2.0
     phi = oi.GaussianConvolutionPhi1D(N_terms, mu, sigma)
@@ -51,7 +54,7 @@ def test_K_kernel():
     for beta_idx in range(N_beta):
         for alpha in range(N_terms):
             L_t = L_t.at[beta_idx].multiply(Phi[alpha, beta_idx])
-    test_val = simple_dft(L_t, 'i') * simple_dft(K_t, 'i')
+    test_val = simple_dft(L_t, "i") * simple_dft(K_t, "i")
     ref_val = jnp.ones((N_beta), dtype=complex)
     assert test_val == pytest.approx(ref_val, rel=1e-15)
     # ----------------------
@@ -74,7 +77,7 @@ def test_K_kernel():
 
 def test_D_tensor():
     N_alpha, max_beta_idx = 5, 7
-    N_beta = 2*max_beta_idx + 1
+    N_beta = 2 * max_beta_idx + 1
     mu = 1.0
     sigma = 2.0
     phi = oi.GaussianConvolutionPhi1D(max_beta_idx, mu, sigma)
@@ -88,7 +91,9 @@ def test_D_tensor():
     D_tens_manual = np.ones((N_alpha, N_beta), dtype=np.complex128)
     for beta_idx in range(N_beta):
         for alpha in range(N_alpha):
-            D_tens_manual[alpha, beta_idx] = -1j * Phi_prime[alpha, beta_idx] / Phi[alpha, beta_idx] * L_t[beta_idx]
+            D_tens_manual[alpha, beta_idx] = (
+                Phi_prime[alpha, beta_idx] / Phi[alpha, beta_idx] * L_t[beta_idx]
+            )
     assert D_tens == pytest.approx(jnp.array(D_tens_manual), rel=1e-15)
 
 
