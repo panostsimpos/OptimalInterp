@@ -18,22 +18,37 @@ def clenshaw_curtis(N: int):
     w = jnp.concat((w, w[0:1]))
     return x, w
 
-def fourier_coeffs_to_evals(coeffs: Float[Array, " N"]):
+def fourier_coeffs_to_evals(coeffs: Float[Array, " N"]) -> Float[Array, " N+1"]:
     r"""
     Given a vector of Fourier coefficients $C_\gamma$, calculate the vector
     $$ v_j = \sum_{\gamma} C_\gamma \exp( i \gamma x_j ) $$
-    where $x_j = 2\pi (j-1) / N$
-    """
-    # Forward makes sure normalization is correct
-    return jnp.fft.ifft(coeffs, norm='forward')
+    where $x_j = 2\pi (j-1) / N$.
 
-def evals_to_fourier_coeffs(eval_pts: Float[Array, " N"]):
+    NOTE: ADDS ONE INDEX TO BE CONSISTENT
+    """
+    assert len(coeffs) % 2 == 1
+    padded_fourier = jnp.zeros(len(coeffs) + 1, dtype=coeffs.dtype)
+    half_idx = len(coeffs) // 2
+    padded_fourier = padded_fourier.at[:half_idx+1].set(coeffs[half_idx:])
+    padded_fourier = padded_fourier.at[half_idx+2:].set(coeffs[:half_idx])
+    # Forward makes sure normalization is correct
+    return jnp.fft.ifft(padded_fourier, norm='forward')
+
+def evals_to_fourier_coeffs(eval_pts: Float[Array, " N+1"]) -> Float[Array, " N"]:
     r"""
     Given a vector of function evaluations $v_j = f(x_j)$, calculate the Fourier coefficients s.t.
     $$ v_j = \sum_{\gamma} C_\gamma \exp( i \gamma x_j ) $$
     where $ x_j = 2\pi (j-1) / N $
+    NOTE: REMOVES ONE INDEX TO BE CONSISTENT
     """
-    return jnp.fft.fft(eval_pts, norm='forward')
+    assert len(eval_pts) % 2 == 0
+    half_idx = len(eval_pts) // 2
+    fourier_coeff_perm = jnp.fft.fft(eval_pts, norm='forward')
+    fourier_coeff = jnp.concat((
+        fourier_coeff_perm[half_idx+1:],
+        fourier_coeff_perm[:half_idx],
+    ))
+    return fourier_coeff
 
 def sinc_eval(x: Float[Array, "*"]):
     return jnp.sinc(x)
