@@ -513,6 +513,10 @@ def solve(
     if optimizer is None:
         optimizer = optx.LevenbergMarquardt(rtol=rtol, atol=atol, verbose=verbose_set)
     y0 = jnp.zeros((psi_basis.N_shap - 2, N_terms))
+    # =====================================
+    # TEMP
+    y0 = y0.at[0, 1:-1].set(-0.01)
+    # =====================================
     residual_fcn(y0, None)
     opt_sol = optx.least_squares(
         residual_fcn, optimizer, y0, throw=False, max_steps=max_optimizer_steps
