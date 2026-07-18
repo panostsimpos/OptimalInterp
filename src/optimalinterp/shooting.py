@@ -9,6 +9,7 @@ from typing import NamedTuple
 
 __all__ = ["OptimalInterpBVPShootingSolution", "solve"]
 
+
 class OptimalInterpBVPShootingSolution(NamedTuple):
     """Solution container for optimal interpolation BVP.
 
@@ -44,7 +45,9 @@ def rhs(t: Real, y: PyTree[Float[Array, " 4*N"]], args: PyTree):
     return dy
 
 
-def shoot_once(psi_dot_0: Float[Array, " N"], *args, **solver_kwargs) -> tuple[Float[Array, " 4*N"], diffrax.RESULTS]:
+def shoot_once(
+    psi_dot_0: Float[Array, " N"], *args, **solver_kwargs
+) -> tuple[Float[Array, " 4*N"], diffrax.RESULTS]:
     r"Given $\dot{\psi}(0)$, return $\psi(1)$ satisfying ODE."
     psi_0, solver, term, solver_args = args
     N_terms = len(psi_0)
@@ -69,7 +72,9 @@ def shoot_once(psi_dot_0: Float[Array, " N"], *args, **solver_kwargs) -> tuple[F
     )
 
 
-def residual(psi_dot_0: Float[Array, " N"], psi_1: Float[Array, " N"], *args, **solver_kwargs):
+def residual(
+    psi_dot_0: Float[Array, " N"], psi_1: Float[Array, " N"], *args, **solver_kwargs
+):
     N_terms = len(psi_1)
     # Recall that for an instantiation sol of diffrax.Solution the values sol.ys are of shape (time, y_dim)
     trajectory, _ = shoot_once(psi_dot_0, *args, **solver_kwargs)
@@ -128,7 +133,7 @@ def solve(
         optx.LevenbergMarquardt(
             rtol=1e-8,
             atol=1e-8,
-            verbose=frozenset({"step", "accepted", "loss", "step_size"}),
+            verbose=verbose,
         )
     )
 

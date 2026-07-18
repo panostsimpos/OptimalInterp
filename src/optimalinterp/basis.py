@@ -507,11 +507,8 @@ def solve(
             residual_real_fcn,
         )
 
-    verbose_set = (
-        frozenset({"step", "accepted", "loss", "step_size"}) if verbose else frozenset()
-    )
     if optimizer is None:
-        optimizer = optx.LevenbergMarquardt(rtol=rtol, atol=atol, verbose=verbose_set)
+        optimizer = optx.LevenbergMarquardt(rtol=rtol, atol=atol, verbose=verbose)
     y0 = jnp.zeros((psi_basis.N_shap - 2, N_terms))
     # =====================================
     # TEMP
