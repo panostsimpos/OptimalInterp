@@ -6,3 +6,6 @@
 *notebooks/solvers
 *notebooks/visualization
 *.ipynb_checkpoints
+/.venv
+/dev-notes/
+.pytest_cache
