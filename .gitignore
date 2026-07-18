@@ -5,3 +5,4 @@
 *notebooks/examples
 *notebooks/solvers
 *notebooks/visualization
+*.ipynb_checkpoints
