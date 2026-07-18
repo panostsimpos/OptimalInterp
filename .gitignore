@@ -7,5 +7,5 @@
 *notebooks/visualization
 *.ipynb_checkpoints
 /.venv
-/dev-notes/
+dev-notes/
 .pytest_cache
