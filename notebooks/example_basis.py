@@ -31,7 +31,7 @@ jax.config.update("jax_debug_nans", True)
 max_order, N_grid, N_terms = 24, 1025, 5
 mu, sigma = 2.0, 4.0
 psi = oi.basis.LinearBasis(max_order, "chebyshev")
-phi = oi.moment_generator.GaussianPhi1D(N_terms, mu, sigma)
+phi = oi.moment_generator.GaussianConvolutionPhi1D(N_terms, mu, sigma)
 pts, wts = oi.util.clenshaw_curtis(N_grid)
 t_grid = jnp.sort(pts)
 t_wts = jnp.sqrt(wts)
