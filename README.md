@@ -6,7 +6,7 @@ We created this repository to explore certain ideas that came out my [workshop p
 None of the content of the repository ended up in the paper. 
 However, going through this gave us essential intuition.
 
-A lot of the experiments failed and this is precisely what led us to conjecture and prove the impossibility theorems in [our paper](https://arxiv.org/abs/2504.14425).
+A lot of the experiments failed and this is precisely what led us to conjecture and prove the impossibility theorems in [our paper](https://arxiv.org/abs/2604.15439).
 Nonetheless, some of the mathematical ideas and computational abstractions developed here could be quite useful in understand the **Optimal design** question for stochastic interpolants, discussed below. 
 Due to these considerations we decided to make our code public.
 
