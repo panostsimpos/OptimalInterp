@@ -12,7 +12,7 @@ Due to these considerations we decided to make our code public.
 
 This README contains the following:
 
-1. Installation instructions.
+1. Installation instructions \& quickstart.
 2. Mathematical framework.
 3. Description of experiments and algorithmic abstractions.
 
@@ -51,6 +51,13 @@ OptimalInterp/
 ```
 
 Tests are in `test/`, implementations are in `src/` and experiment notebooks are in `notebooks/`.
+
+Quickstart
+---
+A quick introduction that uses the same features of the repository can be found in 
+[`notebooks/gaussian_example_shooting.py`](notebooks/gaussian_example_shooting.py).
+The notebook attempts to compute the optimal (straight-line) modal interpolant that connects two univariate Gaussian distributions by using a Gaussian stochastic basis.
+
 
 Mathematical framework
 ---
@@ -97,7 +104,7 @@ $
 $
 and $\mathcal{O}$ is the answer to question $1$.
 
-Key Mathematical Result
+Key Mathematical Insight
 ---
 
 A perspective I took in this [workshop paper](https://arxiv.org/pdf/2510.11657) was to *assert* that a better interpolant is an interpolant that leads to an easily integrable $v_t$. 
