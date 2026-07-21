@@ -183,7 +183,7 @@ First, we make the following assumption on the representation:
 
 **Assumption.**
 
-  Assume that the stochastic process $X_\bullet$ is of the form
+  Assume that the stochastic process $X_\bullet$ is 
 
 $$
     X_t = \sum_{\alpha} \psi_\alpha(t) \, Z_\alpha \, ,
@@ -261,7 +261,7 @@ $$
 
 **Proof.**
 
-  By substituting the expressions for $v_t, a_t,$ and $\Pi_t$ from the proposition on conditional statistics for the polynomial-chaos expansion into the PDE we obtain
+  By using the definitions for $v_t, a_t,$ and $\Pi_t$ as well as the **modal interpolant** ansatz we obtain
 
 $$
     \sum_{\alpha, \gamma} \dot \psi_\alpha(t) \, \dot \psi_\gamma(t) \, \nabla \cdot \Big( \rho_t(x) \, G_{\alpha \gamma}(x,t) \Big) = \sum_{\alpha} \ddot \psi_\alpha(t) \, \rho_t(x) \, H_\alpha(x,t)
@@ -275,8 +275,8 @@ $$
 \end{aligned}
 $$
 
-  where we recall that the $\mathbf{G}_{\alpha \gamma}(x,t) \in \mathbb{R}^{d \times d}$ and $\mathbf{H}_\alpha(x,t) \in \mathbb{R}^d$.
-  Now one can use the Fourier representation theorem above to write
+  and we note that $\mathbf{G}_{\alpha \gamma}(x,t) \in \mathbb{R}^{d \times d}$ and $\mathbf{H}_\alpha(x,t) \in \mathbb{R}^d$.
+  Now one can use a Fourier expansion to write
 
 $$
 \begin{aligned}
@@ -303,7 +303,7 @@ $$
 
 $$
 \begin{aligned}
-    \tilde{C}_{\alpha \beta \gamma}^{k}(t) &\coloneq \mathcal{F} \big[ \, \partial_j \, {G}_{\alpha \gamma}^{j k} \, \big](\beta) \\
+    \tilde{C}_{\alpha \beta \gamma}^{k}(t) &\coloneq \mathcal{F} \big[ \, \partial_j \left( \rho_t \, {G}_{\alpha \gamma}^{j k} \right) \, \big](\beta) \\
     &= i \, \beta_j \, \mathcal{F} \big[ \, {G}_{\alpha \gamma}^{j k}(x,t) \, \big](\beta) \\
     &= i \, \beta_j \, \tilde{\tilde{ C}}_{\alpha \beta \gamma}^{j k}(t) \, ,
 \end{aligned}
@@ -476,74 +476,3 @@ $$
     &= \sum_{\alpha} \mathcal{F}[f](\alpha) \, \mathcal{F}[g](\beta - \alpha) \, .
 \end{aligned}
 $$
-
-**Remark.**
-
-  Notice that as stated, the cost of forming the explicit system above is $\mathcal{O}(N^5)$ where $N$ is the number of degrees of freedom used in the expansion above after truncation, i.e. $\psi_0, \ldots, \psi_{N-1}$.
-  Indeed, first one computes and stores the tensor $D$ which costs $\mathcal{O}(N^2)$ operations, since we assume that the $\Phi_\alpha$ can be evaluated in constant time.
-  Then, one computes and stores the kernel $K_\beta(t)$ which involves a (Fast) Fourier Transform on a grid of size $N$ -- recall, here, that we are retaining as many modes as degrees of freedom -- which costs $\mathcal{O}(N \log N)$ operations.
-  Finally, one computes the tensor $C$ which involves three nested loops over the indices $\alpha, \beta, \gamma \in \{0, \ldots, N-1\}$ and in each iteration one needs to compute convolution -- i.e. a double sum -- over $\delta, \epsilon \in \{0, \ldots, N-1\}$. This results in a total cost of $\mathcal{O}(N^5)$ operations.
-
-**Remark.**
-
-  A closer look at the proof, however, reveals a more efficient strategy to compute the tensor $C$, reducing the overall cost to $\mathcal{O}(N^4 \, \log N)$ operations. Indeed, after having computed and stored the tensor $D$ and the kernel $K$, one may use the two equations above, equivalently the Fourier convolution theorem, to write
-
-$$
-   D_{\bullet \alpha}(t) \ast K_\bullet(t) \ast D_{\bullet \gamma}(t) = \mathcal{F} \left[ \mathcal{F}^{-1}\left[F_t^{(\alpha)}\right] \cdot \frac{1}{\mathcal{F}^{-1}[L_t]} \cdot \mathcal{F}^{-1}\left[F_t^{(\gamma)}\right] \right](\beta) \, ,
-$$
-
-  where the $\cdot$ indicate ordinary scalar multiplication we have defined the function
-
-$$
-    F_t^{(\alpha)}(\beta) = D_{\beta \alpha}(t) \, ,
-$$
-
-  and $L_t$ is as in the previous theorem.
-  Since the $D$ tensor and $L_t$ have been pre-computed, this step consts only $\mathcal{O}(N \, \log N)$ operations for each fixed triple $(\alpha, \beta, \gamma)$.
-  The loop over $\alpha, \beta, \gamma$ then results in a total cost of $\mathcal{O}(N^4 \, \log N)$ operations.
-
-**Proposition.**
-
-  The matrix $D(t)$ is invertible for all $t \in [0,1]$ provided that the density $\rho_t$ is strictly positive for all $t \in [0,1]$ and the
-  functions
-
-$$
-    f_\alpha(x,t) = \mathbb{E}[Z_\alpha \mid X_t = x]
-$$
-
-  are linearly independent for all $t \in [0,1]$.
-
-**Proof.**
-
-  Suppose that the matrix $D(t)$ is non-invertible for some $t \in [0,1]$.
-  It then follows that the columns are linearly dependent, i.e., there exists a collection of scalars $\{ c_\beta \}_\beta$, not all zero, such that
-
-$$
-    \sum_\alpha c_\alpha \, D_{\beta \alpha}(t) = 0 \, , \quad \forall \, \beta \, .
-$$
-
-  Now recall that $D_{\beta \alpha}(t)$ are the Fourier coefficients of the functions $\rho_t(x) \, f_\alpha(x,t)$, i.e.
-
-$$
-    D_{\beta \alpha}(t) = \mathcal{F} \big[ \rho_t \, f_\alpha \big](\beta) \, .
-$$
-
-  By the linearity of the Fourier transform we thus have
-
-$$
-    \mathcal{F} \left[ \rho_t \, \sum_\alpha c_\alpha \, f_\alpha \right](\beta) = 0 \, , \quad \forall \, \beta \, ,
-$$
-
-  Since the Fourier transform is injective it follows that
-
-$$
-    \rho_t(x) \, \sum_\alpha c_\alpha \, f_\alpha(x,t) = 0 \, , \quad \forall \, x \, .
-$$
-
-  and using the assumption the strict positivity of $\rho_t$ we conclude that
-
-$$
-    \sum_\alpha c_\alpha \, f_\alpha(x,t) = 0 \, , \quad \forall \, x \, .
-$$
-
-  This contradicts the linear independence of the functions $\{ f_\alpha(\cdot, t) \}_\alpha$.
