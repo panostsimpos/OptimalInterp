@@ -2,7 +2,7 @@
 
 This repository was built in collaboration with Daniel Sharp, a fellow PhD student at the Uncertainty Quantification Group at MIT. Development happened in a private repository thus git history does not reflect contribution.
 
-We created this repository to explore certain ideas that came out my [workshop paper](https://arxiv.org/pdf/2510.11657) and led us to write [this paper](https://arxiv.org/abs/2504.14425) together.
+We created this repository to explore certain ideas that came out my [workshop paper](https://arxiv.org/pdf/2510.11657) and led us to write [this paper](https://arxiv.org/abs/2604.15439) together.
 None of the content of the repository ended up in the paper. 
 However, going through this gave us essential intuition.
 
@@ -44,16 +44,14 @@ The project directory structure should roughly be:
 OptimalInterp/
 ├── README.md
 ├── pyproject.toml
-├── python-version
+├── .python-version
 ├── uv.lock
 ├── src/
 │   └── optimalinterp/
-└── tests/
-    └── 
+└── test/
 └── notebooks/
-    └── 
-
 ```
+
 Tests are in `test/`, implementations are in `src/` and experiment notebooks are in `notebooks/`.
 
 Mathematical framework
@@ -85,7 +83,7 @@ $$
     P_t = \operatorname{Law} X_t
 $$ -->
 
-This powerful framework encompasses many known generative models, e.g., diffusion models, continuous normalizing flows, variational auto-encoders etc but it also describes, at least in principle, *many new* generative models. Indeed, the known generative models correspond to "relatively straightforward" choices of $I_t$ e.g. 
+This powerful framework encompasses many known generative models, e.g., diffusion models, but it also describes, at least in principle, *many new* generative models. Indeed, the known generative models correspond to "relatively straightforward" choices of $I_t$ e.g. 
 $$
     X_t = \alpha_t X_0 + \beta_t X_1
 $$
@@ -110,10 +108,10 @@ $$
     \frac{d}{dt} v_t(x_t) = 0 \iff \partial_t v_t(x) + (v_t \cdot \nabla) v_t(x) \equiv 0
 $$
 and the latter equation needs to hold for all $x \in \R^d$, assuming surjectivity of the flow.
-This PDE on the right is sometimes also referred to as the (inviscid) Burger's equation.
+This PDE on the right is sometimes also referred to as the (inviscid) Burgers' equation.
 We can now pose the following problem:
 
-**Problem**: Given source and target measures $P_0, P_1$ find an interpolant $I_t$ such that with $X_t = I_t(X_0, X_1)$ and $(X_0, X_1) \sim P_0 \otimes P_1$ the conditional velocity $v_t$ defined above satisfies the Burger's equation
+**Problem**: Given source and target measures $P_0, P_1$ find an interpolant $I_t$ such that with $X_t = I_t(X_0, X_1)$ and $(X_0, X_1) \sim P_0 \otimes P_1$ the conditional velocity $v_t$ defined above satisfies the Burgers' equation
 $$
     \partial_t v_t + (v_t \cdot \nabla) v_t(x) \equiv 0 .
 $$
@@ -145,7 +143,7 @@ A key mathematical result shown in DERIVATIONS.md shows that under this ansatz w
 $$
     \nabla \cdot \left( \rho_t \, \Pi_t \right) = \rho_t \, a_t , \iff \mathbf{D} \, \ddot \psi(t) = \dot \psi(t)^\top \, \mathbf{C} \, \dot \psi(t) 
 $$
-and $\mathbf{D} \, , \, \mathbf{C}$ are tensors of order $3$ and $4$, respectively, defined in terms of the moment generating functions
+and $\mathbf{D} \, , \, \mathbf{C}$ are tensors of order $3$ and $4$, respectively, defined in terms of the characteristic functions
 $$
     \Phi_\alpha(\xi) = \mathbb{E} \left[ e^{i \xi Z_\alpha} \right] .
 $$
@@ -173,7 +171,7 @@ Notebooks
 1. `notebooks/gaussian_example_shooting.py` solves the ODE via a shooting method for a stochastic basis $Z_\alpha \sim \mathcal{N}(\mu_\alpha, \sigma_\alpha^2)$ consisting of Gaussian random variables.
 2. `notebooks/wrapped_gaussian_example_shooting.py` does as in (1) above but now the stochastic basis $\{Z_\alpha \}_\alpha$ consists of Gaussian distributions on the torus; these can be defined in terms of quotient maps $\R^d \to \R^d / \Z^d$.
 3. `notebooks/gaussian_example_basis.py` uses the same stochastic basis as (1) and treats the resulting ODE as a $d=1$ PDE and uses a collocation method.
-4. `notebooks/gaussian_example_basis.py` uses a collocation method on the stochastic basis discussed above in (3).
+4. `notebooks/wrapped_gaussian_example_basis.py` uses a collocation method on the same stochastic basis discussed above in (2).
 
 Abstractions
 ---
@@ -204,7 +202,7 @@ The class
 ````python
 class MomentGeneratingPhi(ABC):
 ````
-provides the core functions of the `StochasticBasis` class above: it encapsulates the moment generating functions
+provides the core functions of the `StochasticBasis` class above: it encapsulates the characteristic functions
 $$
     \Phi_\alpha(\xi) = \mathbb{E} \left[ e^{i \xi Z_\alpha} \right] 
 $$

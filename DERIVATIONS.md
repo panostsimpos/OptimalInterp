@@ -1,10 +1,10 @@
-### Treatment of the PDE
+### PDE as an ODE system
 
 First, we make the following assumption on the representation:
 
-**Assumption.**
+**Definition.**
 
-  Assume that the stochastic process $X_\bullet$ is 
+  A stochastic process $X_\bullet$ is a **modal interpolant** if it can be written in the form
 
 $$
     X_t = \sum_{\alpha} \psi_\alpha(t) \, Z_\alpha \, ,
@@ -21,7 +21,7 @@ $$
 
 **Example.**
 
-  A canonical example of such a representation is given by the Karhunen-LoÃ¨ve Expansion (KLE) of an $\mathbb{R}$-valued, centered Gaussian Process $X_\bullet \sim \mathcal{GP}( \mathbf{0}, C)$ that is square integrable. Indeed, taking the $\{ \psi_\alpha \}_\alpha$ to be the eigenfunctions of the covariance operator $C$ one obtains an $L^2$ convergent sum of the form above with $Z_\alpha$ satisfying
+  A canonical example is the Karhunen–Loève Expansion (KLE) of an $\mathbb{R}$-valued, centered Gaussian Process $X_\bullet \sim \mathcal{GP}( \mathbf{0}, C)$ that is square integrable. Indeed, taking the $\{ \psi_\alpha \}_\alpha$ to be the eigenfunctions of the covariance operator $C$ one obtains an $L^2$ convergent sum of the form above with $Z_\alpha$ satisfying
 
 $$
     Z_\alpha = \int_0^1 \psi_\alpha(t) \, X_t \, \mathrm{d} t \, ,
@@ -32,7 +32,7 @@ $$
 
 **Definition.**
 
-    For each $\alpha \in \mathbb{Z}$ and $\xi \in \mathbb{R}$ write
+  For each $\alpha \in \mathbb{Z}$ and $\xi \in \mathbb{R}$ write
 
 $$
     \Phi_\alpha(\xi) = \mathbb{E}[e^{i \xi Z_\alpha}]
@@ -44,8 +44,12 @@ Write $\psi(t) = (\psi_\alpha(t))_\alpha$ for the vector of modal functions.
 
 **Theorem.**
 
-  Assume $X_\bullet$ is a stochastic process satisfying the two assumptions above.
-  Then, the PDE is equivalent to the infinite system of equations
+  Assume $X_\bullet$ is a modal interpolant.
+  Then, the PDE 
+  $$
+    \nabla \cdot \left( \rho_t \, \Pi_t \right) = \rho_t \, a_t 
+  $$
+  is equivalent to the infinite system of equations
 
 $$
     \mathbf D\, \ddot \psi(t) = \dot \psi(t)^\top \, \mathbf C \, \dot \psi(t) \, .
