@@ -1,6 +1,20 @@
 ### PDE as an ODE system
 
-First, we make the following assumption on the representation:
+**Definition.**
+  Let $D \subset \R^d$ be the torus $D = \R^d / \Z^d$.
+  The *Fourier transform* of a complex valued function $f \in L^2(D)$ is given by
+  $$
+    \mathcal{F}[f](\xi) \coloneq \widehat{f}(\xi) \coloneq \frac{1}{(2 \pi)^d} \int_{D} f(x) \, e^{-i \, \xi \cdot x} \, dx \, , \quad \xi \in \Z^d \, .
+  $$
+  Furthermore, we the *Fourier series* associated to $f$ is
+  $$
+    \mathcal{S}[f](x) \coloneq \sum_{\xi \in \Z^d} \widehat{f}(\xi) \, e^{i \, \xi \cdot x} \, , \quad x \in D \, .
+  $$
+  and we have the identity
+  $$
+    f(x) = \mathcal{S}[f](x)
+  $$
+
 
 **Definition.**
 
@@ -42,9 +56,9 @@ $$
 
 Write $\psi(t) = (\psi_\alpha(t))_\alpha$ for the vector of modal functions.
 
-**Theorem.**
+**Theorem (Informal).**
 
-  Assume $X_\bullet$ is a modal interpolant.
+  Assume $X_\bullet$ is a modal interpolant consisting of a nice enough stochastic basis $\{Z_\alpha\}_\alpha$ and nice enough model functions $\{\psi_\alpha \}_\alpha$. Furthermore, assume it is defined on the torus $D = \R^d / \Z^d$.
   Then, the PDE 
   $$
     \nabla \cdot \left( \rho_t \, \Pi_t \right) = \rho_t \, a_t 
@@ -129,7 +143,7 @@ $$
 $$
 \begin{aligned}
     \tilde{C}_{\alpha \beta \gamma}^{k}(t) &\coloneq \mathcal{F} \big[ \, \partial_j \left( \rho_t \, {G}_{\alpha \gamma}^{j k} \right) \, \big](\beta) \\
-    &= i \, \beta_j \, \mathcal{F} \big[ \, {G}_{\alpha \gamma}^{j k}(x,t) \, \big](\beta) \\
+    &= i \, \beta_j \, \mathcal{F} \big[ \, \rho_t \, {G}_{\alpha \gamma}^{j k}(x,t) \, \big](\beta) \\
     &= i \, \beta_j \, \tilde{\tilde{ C}}_{\alpha \beta \gamma}^{j k}(t) \, ,
 \end{aligned}
 $$
@@ -161,12 +175,12 @@ $$
 
 $$
 \begin{aligned}
-    D^j_{\beta \alpha}(t) &= i \, (2 \pi)^d\frac{1}{(2 \pi)^d} \int_{D} \rho_t(x) \, \mathbb{E}[Z^j_\alpha \mid x] \, e^{-i \, \beta \, x} \, \mathrm{d} x \\
+    D^j_{\beta \alpha}(t) &= i \, (2 \pi)^d\frac{1}{(2 \pi)^d} \int_{D} \rho_t(x) \, \mathbb{E}[Z^j_\alpha \mid x] \, e^{-i \, \beta \cdot x} \, \mathrm{d} x \\
     &= i \, \mathbb{E} \Big[ \mathbb{E} \big[ Z_\alpha^j | X_t \big] \, e^{-i \, \beta \cdot X_t} \Big] \\
     &= i \, \mathbb{E} \Big[ Z_\alpha^j \, e^{-i \, \beta \cdot X_t} \Big] \\
     &= i \, \mathbb{E} \Big[ Z_\alpha^j \, e^{-i \, \beta \cdot \left( \sum_\gamma \psi_\gamma(t) \, Z_\gamma \right) } \Big] \\
-    &= i \, \mathbb{E} \Big[ \prod_\gamma Z_\alpha^j \, e^{-i \, \beta \, \psi_\gamma(t) \, Z_\gamma} \Big] \\
-    &= i \, \mathbb{E} \Big[ Z_\alpha^j \, e^{-i \, \beta \, \psi_\alpha(t) \, Z_\alpha} \Big] \, \prod_{\gamma \neq \alpha} \mathbb{E} \Big[ e^{-i \, \beta \, \psi_\gamma(t) \, Z_\gamma} \Big] \\
+    &= i \, \mathbb{E} \Big[ \prod_\gamma Z_\alpha^j \, e^{-i \, \beta \cdot \psi_\gamma(t) \, Z_\gamma} \Big] \\
+    &= i \, \mathbb{E} \Big[ Z_\alpha^j \, e^{-i \, \beta \cdot \psi_\alpha(t) \, Z_\alpha} \Big] \, \prod_{\gamma \neq \alpha} \mathbb{E} \Big[ e^{-i \, \beta \cdot \psi_\gamma(t) \, Z_\gamma} \Big] \\
     &= \partial_j \Phi_\alpha\left( -\beta \psi_\alpha(t) \right) \, \prod_{\gamma \neq \alpha} \Phi_\gamma\left( -\beta \psi_\gamma(t) \right) \, .
 \end{aligned}
 $$
@@ -177,10 +191,10 @@ $$
 
 $$
 \begin{aligned}
-    C_{\alpha \beta \gamma}^{j k}(t) &= \beta \, i^2 \, (2 \pi)^d \, \frac{1}{(2 \pi)^d} \int_{\mathbb{R}^d} \rho_t(x) \, \operatorname{Cov}(Z_\alpha^j , Z_\gamma^k \mid x) \, e^{-i \, \beta \, x} \, \mathrm{d} x \\
-    &= - \beta \, \mathbb{E} \Big[ \operatorname{Cov}(Z_\alpha^j, Z_\gamma^k \mid X_t) \, e^{-i \, \beta \, X_t} \Big] \\
-    &= - \beta \, \mathbb{E} \Big\{ \Big[ \mathbb{E} \big[ Z_\alpha^j Z_\gamma^k | X_t \big] - \mathbb{E}\big[Z_\alpha^j | X_t \big] \, \mathbb{E}\big[Z_\gamma^k | X_t \big] \Big] e^{-i \, \beta \, X_t} \Big\} \\
-    &= - \beta \, \mathbb{E} \Big[ Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \, X_t} \Big] + \beta \, \mathbb{E} \Big[ \mathbb{E}[Z_\alpha^j | X_t] \, \mathbb{E}[Z_\gamma^k | X_t] e^{-i \, \beta \, X_t}  \Big]  \\
+    C_{\alpha \beta \gamma}^{j k}(t) &= \beta \, i^2 \, (2 \pi)^d \, \frac{1}{(2 \pi)^d} \int_{\mathbb{R}^d} \rho_t(x) \, \operatorname{Cov}(Z_\alpha^j , Z_\gamma^k \mid x) \, e^{-i \, \beta \cdot x} \, \mathrm{d} x \\
+    &= - \beta_j \, \mathbb{E} \Big[ \operatorname{Cov}(Z_\alpha^j, Z_\gamma^k \mid X_t) \, e^{-i \, \beta \cdot X_t} \Big] \\
+    &= - \beta_j \, \mathbb{E} \Big\{ \Big[ \mathbb{E} \big[ Z_\alpha^j Z_\gamma^k | X_t \big] - \mathbb{E}\big[Z_\alpha^j | X_t \big] \, \mathbb{E}\big[Z_\gamma^k | X_t \big] \Big] e^{-i \, \beta \cdot X_t} \Big\} \\
+    &= - \beta_j \, \mathbb{E} \Big[ Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \cdot X_t} \Big] + \beta \, \mathbb{E} \Big[ \mathbb{E}[Z_\alpha^j | X_t] \, \mathbb{E}[Z_\gamma^k | X_t] e^{-i \, \beta \cdot X_t}  \Big]  \\
 \end{aligned}
 $$
 
@@ -188,11 +202,11 @@ $$
 
 $$
 \begin{aligned}
-    &\mathbb{E} \Big[ Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \, X_t} \Big] = \\
-    &= \Big[ Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \, \sum_\delta \psi_\delta(t) Z_\delta} \Big] \\
-    &= \mathbb{E} \Big[ \prod_\delta \, Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \, \psi_\delta(t) \, Z_\delta} \Big] \\
+    &\mathbb{E} \Big[ Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \cdot X_t} \Big] = \\
+    &= \Big[ Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \cdot \sum_\delta \psi_\delta(t) Z_\delta} \Big] \\
+    &= \mathbb{E} \Big[ \prod_\delta \, Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \cdot \psi_\delta(t) \, Z_\delta} \Big] \\
     &= \delta_{\alpha \gamma} \, \mathbb{E} \Big[ Z_\alpha^j \, Z_\alpha^k \, e^{-i \, \beta \, \psi_\alpha(t) \, Z_\alpha} \Big] \, \prod_{\delta \neq \alpha} \mathbb{E} \Big[ e^{-i \, \beta \, \psi_\delta(t) \, Z_\delta} \Big] \\
-    &+ (1 - \delta_{\alpha \gamma}) \, \mathbb{E} \Big[ Z_\alpha^j \, e^{-i \, \beta \, \psi_\alpha(t) \, Z_\alpha} \Big] \, \mathbb{E} \Big[ Z_\gamma^k \, e^{-i \, \beta \, \psi_\gamma(t) \, Z_\gamma} \Big] \, \prod_{\delta \neq \alpha, \gamma} \mathbb{E} \Big[ e^{-i \, \beta \, \psi_\delta(t) \, Z_\delta} \Big] \\
+    &+ (1 - \delta_{\alpha \gamma}) \, \mathbb{E} \Big[ Z_\alpha^j \, e^{-i \, \beta \cdot \psi_\alpha(t) \, Z_\alpha} \Big] \, \mathbb{E} \Big[ Z_\gamma^k \, e^{-i \, \beta \cdot \psi_\gamma(t) \, Z_\gamma} \Big] \, \prod_{\delta \neq \alpha, \gamma} \mathbb{E} \Big[ e^{-i \, \beta \cdot \psi_\delta(t) \, Z_\delta} \Big] \\
     &= - \delta_{\alpha \gamma} \, \partial_j \partial_k \Phi_\alpha\left( -\beta \psi_\alpha(t) \right) \, \prod_{\delta \neq \alpha} \Phi_\delta\left( -\beta \psi_\delta(t) \right) \\
     &+ (1 - \delta_{\alpha \gamma}) \, \partial_j \Phi_\alpha\left( -\beta \psi_\alpha(t) \right) \, \partial_k \Phi_\gamma\left( -\beta \psi_\gamma(t) \right) \, \prod_{\delta \neq \alpha, \gamma} \Phi_\delta\left( -\beta \psi_\delta(t) \right) \, .
 \end{aligned}
@@ -224,15 +238,15 @@ $$
   Finally, the kernel $K$ can be computed as follows: first, use the Fourier representation theorem above to write
 
 $$
-    \rho_t(x) = \sum_{\beta} \mathcal{F}[\rho_t](\beta) \, e^{i \, \beta \, x} \, .
+    \rho_t(x) = \sum_{\beta} \mathcal{F}[\rho_t](\beta) \, e^{i \, \beta \cdot x} \, .
 $$
 
   Now, compute
 
 $$
 \begin{aligned}
-      \mathcal{F}[\rho_t](\beta) &= \frac{1}{(2 \pi)^d} \int_{\mathbb{T}^d} e^{-i \, \beta \, x} \, \rho_t(x) \, \mathrm{d} x \\
-      &= \frac{1}{(2 \pi)^d} \mathbb{E} \left[ e^{-i \, \beta \, X_t} \right] \\
+      \mathcal{F}[\rho_t](\beta) &= \frac{1}{(2 \pi)^d} \int_{\mathbb{T}^d} e^{-i \, \beta \cdot x} \, \rho_t(x) \, \mathrm{d} x \\
+      &= \frac{1}{(2 \pi)^d} \mathbb{E} \left[ e^{-i \, \beta \cdot X_t} \right] \\
       &= \frac{1}{(2 \pi)^d} \prod_\alpha \Phi_\alpha\left( -\beta \, \psi_\alpha(t) \right) \, ,
 \end{aligned}
 $$
@@ -242,8 +256,8 @@ $$
 
 $$
 \begin{aligned}
-    \tilde K_\beta(t) &= \mathcal{F} \left[ \frac{1}{\sum_\beta \frac{1}{(2 \pi)^d} \prod_\alpha \Phi_\alpha\left( -\beta \, \psi_\alpha(t) \right) \, e^{i \, \beta \, x}} \right](\beta) \\
-    &= (2 \pi)^d \, \mathcal{F} \left[ \frac{1}{ \sum_\beta \prod_\alpha \Phi_\alpha\left( -\beta \, \psi_\alpha(t) \right) \, e^{i \, \beta \, x} } \right](\beta) \\
+    \tilde K_\beta(t) &= \mathcal{F} \left[ \frac{1}{\sum_\beta \frac{1}{(2 \pi)^d} \prod_\alpha \Phi_\alpha\left( -\beta \, \psi_\alpha(t) \right) \, e^{i \, \beta \cdot x}} \right](\beta) \\
+    &= (2 \pi)^d \, \mathcal{F} \left[ \frac{1}{ \sum_\beta \prod_\alpha \Phi_\alpha\left( -\beta \, \psi_\alpha(t) \right) \, e^{i \, \beta \cdot x} } \right](\beta) \\
 \end{aligned}
 $$
 
@@ -288,15 +302,15 @@ $$
   We compute
 
 $$
-    \mathcal{F}[f \, g](\beta) = \frac{1}{(2 \pi)^d} \int_{\mathbb{T}^d} e^{-i \, \beta \, x} \, f(x) \, g(x) \, \mathrm{d} x \, .
+    \mathcal{F}[f \, g](\beta) = \frac{1}{(2 \pi)^d} \int_{\mathbb{T}^d} e^{-i \, \beta \cdot x} \, f(x) \, g(x) \, \mathrm{d} x \, .
 $$
 
   and by expanding $f$ and $g$ in Fourier series we obtain
 
 $$
 \begin{aligned}
-    \mathcal{F}[f \, g](\beta) &= \frac{1}{(2\pi)^d} \int_{\mathbb{T}^d} e^{-i \, \beta \, x} \, \left( \sum_{\alpha} \mathcal{F}[f](\alpha) \, e^{i \, \alpha \, x} \right) \, \left( \sum_{\gamma} \mathcal{F}[g](\gamma) \, e^{i \, \gamma \, x} \right) \, \mathrm{d} x \\
-    &= \sum_{\alpha, \gamma} \mathcal{F}[f](\alpha) \, \mathcal{F}[g](\gamma) \,\frac{1}{(2\pi)^d} \int_{\mathbb{T}^d} e^{i \, (\alpha + \gamma - \beta) \, x} \, \mathrm{d} x \\
+    \mathcal{F}[f \, g](\beta) &= \frac{1}{(2\pi)^d} \int_{\mathbb{T}^d} e^{-i \, \beta \cdot x} \, \left( \sum_{\alpha} \mathcal{F}[f](\alpha) \, e^{i \, \alpha \cdot x} \right) \, \left( \sum_{\gamma} \mathcal{F}[g](\gamma) \, e^{i \, \gamma \cdot x} \right) \, \mathrm{d} x \\
+    &= \sum_{\alpha, \gamma} \mathcal{F}[f](\alpha) \, \mathcal{F}[g](\gamma) \,\frac{1}{(2\pi)^d} \int_{\mathbb{T}^d} e^{i \, (\alpha + \gamma - \beta) \cdot x} \, \mathrm{d} x \\
     &= \sum_{\alpha, \gamma} \mathcal{F}[f](\alpha) \, \mathcal{F}[g](\gamma) \, \mathbf{1}_{\alpha + \gamma = \beta} \\
     &= \sum_{\alpha} \mathcal{F}[f](\alpha) \, \mathcal{F}[g](\beta - \alpha) \, .
 \end{aligned}

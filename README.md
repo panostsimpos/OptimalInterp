@@ -1,13 +1,13 @@
 # Optimal Interpolants
 
-This repository was built in collaboration with Daniel Sharp, a fellow PhD student at the Uncertainty Quantification Group at MIT. Development happened in a private repository thus git history does not reflect contribution.
+This repository was built in collaboration with Daniel Sharp, a fellow PhD student at the Uncertainty Quantification Group at MIT.
 
-We created this repository to explore certain ideas that came out my [workshop paper](https://arxiv.org/pdf/2510.11657) and led us to write [this paper](https://arxiv.org/abs/2604.15439) together.
+We created this repository to explore certain ideas that emerged from my [workshop paper](https://arxiv.org/pdf/2510.11657) and led us to write [this paper](https://arxiv.org/abs/2604.15439) together.
 None of the content of the repository ended up in the paper. 
 However, going through this gave us essential intuition.
 
 A lot of the experiments failed and this is precisely what led us to conjecture and prove the impossibility theorems in [our paper](https://arxiv.org/abs/2604.15439).
-Nonetheless, some of the mathematical ideas and computational abstractions developed here could be quite useful in understand the **Optimal design** question for stochastic interpolants, discussed below. 
+Nonetheless, some of the mathematical ideas and computational abstractions developed here could be quite useful in understanding the **Optimal Design** question for stochastic interpolants, discussed below. 
 Due to these considerations we decided to make our code public.
 
 This README contains the following:
@@ -15,8 +15,6 @@ This README contains the following:
 1. Installation instructions.
 2. Mathematical framework.
 3. Description of experiments and algorithmic abstractions.
-
-I would like to note that this codebase was built from scratch by the two of us, without the use of any LLM tools for code-development.
 
 Installation instructions
 ---
@@ -58,8 +56,8 @@ Mathematical framework
 ---
 The [Stochastic Interpolants paper](https://arxiv.org/pdf/2303.08797) proposes an elegant framework for generative modelling. 
 <!-- Namely, generative models are viewed as probability measure trajectories $t \mapsto P_t$ and each $P_t \in \mathcal{P}(\R^d)$ that are induced by  -->
-Given a data (target) distribution $P_1$ and a source (noise) distribution $P_0$ draw $(X_0, X_1) \in P_0 \otimes P_1$ 
-choose a nice interpolant functions $I_t: \R^d \times \R^d \to \R^d$
+Given a data (target) distribution $P_1$ and a source (noise) distribution $P_0$ draw $(X_0, X_1) \sim P_0 \otimes P_1$ 
+choose a nice function $I_t: \R^d \times \R^d \to \R^d$
 and set
 $$
     X_t = I_t(X_0, X_1) .
@@ -71,8 +69,8 @@ $$
 solve the ODE
 $$
 \begin{cases}
-    \dot \phi_t(x_t) = v_t(x_t) \\
-    x_0 = x
+    \dot \phi_t(x) = v_t(\phi_t(x)) \\
+    \phi_0(x) = x
 \end{cases}
 $$
 and sample (generate) from $P_1$ by drawing $X_0 \sim P_0$ and setting
@@ -91,8 +89,8 @@ for scalar functions $t \mapsto \alpha_t$ and $t \mapsto \beta_t$.
 
 So we wondered: are there *better* generative models, described by exotic interpolant functions $I_t$? What does better even mean, in this context?
 
-**Optimal Design Questions**
-1. What makes some stochastic interpolants better than others? Find an objective $\cal{O}$ the assigns a cost $\mathcal{O}(I)$ to a stochastic interpolant $I$.
+**Optimal Design Question**
+1. What makes some stochastic interpolants better than others? Find an objective $\cal{O}$ that assigns a cost $\mathcal{O}(I)$ to a stochastic interpolant $I$.
 2. Solve the optimization problem
 $
     \min_{I} \mathcal{O}(I)
@@ -105,7 +103,7 @@ Key Mathematical Result
 A perspective I took in this [workshop paper](https://arxiv.org/pdf/2510.11657) was to *assert* that a better interpolant is an interpolant that leads to an easily integrable $v_t$. 
 By elementary considerations, the easiest field $v$ to integrate is a field which is constant along the flow:
 $$
-    \frac{d}{dt} v_t(x_t) = 0 \iff \partial_t v_t(x) + (v_t \cdot \nabla) v_t(x) \equiv 0
+    \frac{d}{dt} v_t(\phi_t(x)) = 0 \iff \partial_t v_t(x) + (v_t \cdot \nabla) v_t(x) \equiv 0
 $$
 and the latter equation needs to hold for all $x \in \R^d$, assuming surjectivity of the flow.
 This PDE on the right is sometimes also referred to as the (inviscid) Burgers' equation.
@@ -117,13 +115,13 @@ $$
 $$
 
 
-Now the main result in the workshop paper is that we can transform the above PDE to a nicer PDE. To wit, with
+Now the main result of the [workshop paper](https://arxiv.org/pdf/2510.11657) is that we can transform the above PDE to a nicer PDE. To wit, with
 $$
     a_t(x) = \mathbb{E} \left[ \ddot X_t \mid X_t = x \right] 
     \quad \textup{and} \quad
     \Pi_t(x) = \operatorname{Cov} \left( \dot X_t \mid X_t = x  \right)
 $$
-the Burger's equation is equivalent to the PDE
+the Burgers' equation is equivalent to the PDE
 $$
     \nabla \cdot \left( \rho_t \, \Pi_t \right) = \rho_t \, a_t ,
 $$
@@ -161,7 +159,7 @@ In short, we have converted our original PDE to a system of ODEs for the basis c
 Code
 ---
 
-We note take a closer look at the code. We discuss both the experiment in `notebooks/` as well as the various abstractions used in `src/optimalinterp/`.
+We now take a closer look at the code. We discuss both the experiment in `notebooks/` as well as the various abstractions used in `src/optimalinterp/`.
 A first time user is advised to look at `notebooks/gaussian_example_shooting.py` since it has the most detailed comments.
 
 All notebooks are run in $d=1$ dimensions. Most use Gaussian end-point measures $P_0$ and $P_1$ although that should be transparent in each notebook.
@@ -171,7 +169,7 @@ Notebooks
 1. `notebooks/gaussian_example_shooting.py` solves the ODE via a shooting method for a stochastic basis $Z_\alpha \sim \mathcal{N}(\mu_\alpha, \sigma_\alpha^2)$ consisting of Gaussian random variables.
 2. `notebooks/wrapped_gaussian_example_shooting.py` does as in (1) above but now the stochastic basis $\{Z_\alpha \}_\alpha$ consists of Gaussian distributions on the torus; these can be defined in terms of quotient maps $\R^d \to \R^d / \Z^d$.
 3. `notebooks/gaussian_example_basis.py` uses the same stochastic basis as (1) and treats the resulting ODE as a $d=1$ PDE and uses a collocation method.
-4. `notebooks/wrapped_gaussian_example_basis.py` uses a collocation method on the same stochastic basis discussed above in (2).
+4. `notebooks/wrapped_gaussian_example_basis.py` uses a collocation method on the stochastic basis discussed above in (2).
 
 Abstractions
 ---
@@ -206,7 +204,7 @@ provides the core functions of the `StochasticBasis` class above: it encapsulate
 $$
     \Phi_\alpha(\xi) = \mathbb{E} \left[ e^{i \xi Z_\alpha} \right] 
 $$
-for each $\alpha \in \mathcal{A}$, which mathematically is the way in which the chosen  stochastic basis $\{ Z_\alpha \}_\alpha$ enters the ODE at hand.
+for each $\alpha \in \mathcal{A}$, which mathematically is the way in which the chosen  stochastic basis $\{ Z_\alpha \}_\alpha$ enters the ODE.
 
 ---
 
@@ -218,7 +216,7 @@ encapsulates the ansatz
 $$
  X_t = \sum_{\alpha} \psi_\alpha(t) Z_\alpha
 $$
-A modal interpolant can be instantiated with user specified $\{ \psi_\alpha \}_\alpha$ and $\{Z_\alpha \}_\alpha$; or for a specified $\{Z_\alpha \}_\alpha$ stored in `stochastic_basis` the user can run
+A modal interpolant can be instantiated with user specified $\{ \psi_\alpha \}_\alpha$ and $\{Z_\alpha \}_\alpha$ or for a specified $\{Z_\alpha \}_\alpha$ stored in `stochastic_basis` the user can (try to) solve the above ODE by e.g. running
 ````python
 optimal_interpolant.compute_optimal_psi_shooting(stochastic_basis)
 ````
