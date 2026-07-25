@@ -155,16 +155,16 @@ $$
     X_t = \sum_\alpha \psi_{\alpha}(t) Z_\alpha
 $$
 
-for fixed, $\mathbb{R}^d$ valued random variables $`\{ Z_{\alpha} \}_\alpha`$, multi-indices $\alpha \in \mathcal{A}$ and real-valued functions $`\psi_\alpha : [0,1] \to \mathbb{R}`$.
+for fixed, $\mathbb{R}^d$ valued random variables $`\{ Z_{\alpha} \}_\alpha `$, multi-indices $\alpha \in \mathcal{A}$ and real-valued functions $`\psi_\alpha : [0,1] \to \mathbb{R}`$.
 We call this ansatz a **modal interpolant**.
 
 A key mathematical result shown in [DERIVATIONS.md](DERIVATIONS.md) shows that under this ansatz we have
 
-$$
+```math
     \nabla \cdot \left( \rho_t \, \Pi_t \right) = \rho_t \, a_t , \iff \mathbf{D} \, \ddot \psi(t) = \dot \psi(t)^\top \, \mathbf{C} \, \dot \psi(t) 
-$$
+```
 
-and $\mathbf{D} \, , \, \mathbf{C}$ are tensors of order $3$ and $4$, respectively, defined in terms of the characteristic functions
+and $`\mathbf{D} \, , \, \mathbf{C}`$ are tensors of order $3$ and $4$, respectively, defined in terms of the characteristic functions
 
 $$
     \Phi_\alpha(\xi) = \mathbb{E} \left[ e^{i \xi Z_\alpha} \right] .
@@ -172,15 +172,15 @@ $$
 
 In index notation we can re-write the above equation as 
 
-$$
+```math
     \sum_{\alpha \in \mathbb{Z}^d} D^k_{\beta \alpha}(t) \, \ddot \psi_\alpha(t) = \sum_{(\alpha, \gamma) \in \mathbb{Z}^d \times \mathbb{Z}^d} \dot \psi_\alpha(t) \, C^k_{\alpha \beta \gamma}(t) \, \dot \psi_\gamma(t) \, ,
     % \quad \textup{for all} \quad k \in \{1, \ldots, d\} \quad \textup{and} \quad \beta \in \mathbb{R}^d
-$$
+```
 
-for all $k \in \{1, \ldots, d\}$ and $\beta \in \mathbb{Z}^d$.
-Notice that once we truncate the $\mathbb{Z}^d$ sums over some finite set of indices $\{-K, \ldots, K \}^d$ for $K \in \mathbb{N}$ we obtain a system of ODEs.
+for all $`k \in \{1, \ldots, d`\}$ and $\beta \in \mathbb{Z}^d$.
+Notice that once we truncate the $\mathbb{Z}^d$ sums over some finite set of indices $`\{-K, \ldots, K \}^d`$ for $K \in \mathbb{N}$ we obtain a system of ODEs.
 
-In short, we have converted our original PDE to a system of ODEs for the basis coefficients $\{ \psi_\alpha \}_\alpha$. The code in this repository is dedicated to solving this ODE system, for specific choices of $\{Z_\alpha \}_\alpha$ and end-point measures $P_0, P_1$.
+In short, we have converted our original PDE to a system of ODEs for the basis coefficients $`\{ \psi_\alpha \}_\alpha`$. The code in this repository is dedicated to solving this ODE system, for specific choices of $`\{Z_\alpha \}_\alpha`$ and end-point measures $P_0, P_1$.
 
 
 Code
