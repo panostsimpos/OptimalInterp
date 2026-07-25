@@ -41,6 +41,8 @@ The project directory structure should roughly be:
 ```text
 OptimalInterp/
 ├── README.md
+├── DERIVATIONS.md
+├── LICENSE
 ├── pyproject.toml
 ├── .python-version
 ├── uv.lock
@@ -55,7 +57,7 @@ Tests are in `test/`, implementations are in `src/` and experiment notebooks are
 Quickstart
 ---
 A quick introduction that uses the same features of the repository can be found in 
-[`notebooks/gaussian_example_shooting.ipynb`](notebooks/gaussian_example_shooting.py).
+[`notebooks/gaussian_example_shooting.ipynb`](notebooks/gaussian_example_shooting.ipynb).
 The notebook attempts to compute the optimal (straight-line) modal interpolant that connects two univariate Gaussian distributions by using a Gaussian stochastic basis.
 
 
@@ -153,7 +155,7 @@ $$
     X_t = \sum_\alpha \psi_{\alpha}(t) Z_\alpha
 $$
 
-for fixed, $\mathbb{R}^d$ valued random variables $\{ Z_{\alpha} \}_\alpha$, multi-indices $\alpha \in \mathcal{A}$ and real-valued functions $\psi_\alpha : [0,1] \to \mathbb{R}$.
+for fixed, $\mathbb{R}^d$ valued random variables $`\{ Z_{\alpha} \}_\alpha`$, multi-indices $\alpha \in \mathcal{A}$ and real-valued functions $`\psi_\alpha : [0,1] \to \mathbb{R}`$.
 We call this ansatz a **modal interpolant**.
 
 A key mathematical result shown in [DERIVATIONS.md](DERIVATIONS.md) shows that under this ansatz we have
@@ -185,7 +187,7 @@ Code
 ---
 
 We now take a closer look at the code. We discuss both the experiment in `notebooks/` as well as the various abstractions used in `src/optimalinterp/`.
-A first time user is advised to look at `notebooks/gaussian_example_shooting.py` since it has the most detailed comments.
+A first time user is advised to look at `notebooks/gaussian_example_shooting.ipynb` since it has the most detailed comments.
 
 All notebooks are run in $d=1$ dimensions. Most use Gaussian end-point measures $P_0$ and $P_1$ although that should be transparent in each notebook.
 

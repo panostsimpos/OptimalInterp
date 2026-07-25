@@ -100,7 +100,7 @@ Write $`\psi(t) = (\psi_\alpha(t))_\alpha`$ for the vector of modal functions.
 \end{aligned}
 ```
 
-  and the functions $`t \mapsto K_{\beta}(t)`$ are given by the the formula
+  and the functions $`t \mapsto K_{\beta}(t)`$ are given by the formula
 
 ```math
     K_{\beta}(t) = \mathcal{F} \left[ \frac{1}{ \sum_\gamma \prod_\alpha \Phi_\alpha\left( -\gamma \, \psi_\alpha(t) \right) \, e^{i \, \gamma \cdot x} } \right](\beta)
@@ -212,7 +212,7 @@ Write $`\psi(t) = (\psi_\alpha(t))_\alpha`$ for the vector of modal functions.
 \begin{aligned}
     \mathbb{E} \Big[ Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \cdot X_t} \Big] &= \mathbb{E} \Big[ Z_\alpha^j \, Z_\gamma^k \, e^{-i \, \beta \cdot \sum_\delta \psi_\delta(t) Z_\delta} \Big] \\
     &= \mathbb{E} \Big[ Z_\alpha^j \, Z_\gamma^k \,  \prod_\delta e^{-i \, \beta \cdot \psi_\delta(t) \, Z_\delta} \Big] \\
-    &= \delta_{\alpha \gamma} \, \mathbb{E} \Big[ Z_\alpha^j \, Z_\alpha^k \, e^{-i \, \beta \, \psi_\alpha(t) \, Z_\alpha} \Big] \, \prod_{\delta \neq \alpha} \mathbb{E} \Big[ e^{-i \, \beta \, \psi_\delta(t) \, Z_\delta} \Big] \\
+    &= \delta_{\alpha \gamma} \, \mathbb{E} \Big[ Z_\alpha^j \, Z_\alpha^k \, e^{-i \, \beta \cdot \psi_\alpha(t) \, Z_\alpha} \Big] \, \prod_{\delta \neq \alpha} \mathbb{E} \Big[ e^{-i \, \beta \cdot \psi_\delta(t) \, Z_\delta} \Big] \\
     &+ (1 - \delta_{\alpha \gamma}) \, \mathbb{E} \Big[ Z_\alpha^j \, e^{-i \, \beta \cdot \psi_\alpha(t) \, Z_\alpha} \Big] \, \mathbb{E} \Big[ Z_\gamma^k \, e^{-i \, \beta \cdot \psi_\gamma(t) \, Z_\gamma} \Big] \, \prod_{\delta \neq \alpha, \gamma} \mathbb{E} \Big[ e^{-i \, \beta \cdot \psi_\delta(t) \, Z_\delta} \Big] \\
     &= - \delta_{\alpha \gamma} \, \partial_j \partial_k \Phi_\alpha\left( -\beta \psi_\alpha(t) \right) \, \prod_{\delta \neq \alpha} \Phi_\delta\left( -\beta \psi_\delta(t) \right) \\
     &+ (\delta_{\alpha \gamma}-1) \, \partial_j \Phi_\alpha\left( -\beta \psi_\alpha(t) \right) \, \partial_k \Phi_\gamma\left( -\beta \psi_\gamma(t) \right) \, \prod_{\delta \neq \alpha, \gamma} \Phi_\delta\left( -\beta \psi_\delta(t) \right) \, .
@@ -287,7 +287,7 @@ Write $`\psi(t) = (\psi_\alpha(t))_\alpha`$ for the vector of modal functions.
 
 **Lemma.**
   Fix $`D = \mathbb{R}^d / \left(2\pi \mathbb{Z}^d\right)`$.
-  For functions $`f, g: D \to \mathbb{R}`$ with absolutely convergence Fourier series we have we have
+  For functions $`f, g: D \to \mathbb{R}`$ with absolutely convergent Fourier series we have we have
 
 ```math
     \mathcal{F}[f \, g](\beta) = \sum_{\alpha} \mathcal{F}[f](\alpha) \, \mathcal{F}[g](\beta - \alpha) \, .

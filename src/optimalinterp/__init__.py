@@ -1,6 +1,9 @@
 from .basis import SplineBasis
-from .solution_approximator import LinearSolutionApproximator
-from .moment_generator import GaussianConvolutionPhi1D, MomentGeneratingPhi, WrappedGaussianConvolutionPhi1D
+from .moment_generator import (
+    GaussianConvolutionPhi1D,
+    MomentGeneratingPhi,
+    WrappedGaussianConvolutionPhi1D,
+)
 from . import ode_residual
 from . import util
 from . import convolution
@@ -10,7 +13,6 @@ from . import visualization
 
 __all__ = [
     "SplineBasis",
-    "LinearSolutionApproximator",
     "GaussianConvolutionBasis",
     "GaussianConvolutionPhi1D",
     "WrappedGaussianConvolutionBasis",
@@ -21,5 +23,5 @@ __all__ = [
     "visualization",
     "modal_interpolant_factory",
     "MomentGeneratingPhi",
-    "optimal_interpolant"
+    "optimal_interpolant",
 ]
