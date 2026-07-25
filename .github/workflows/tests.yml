@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v8
+        with:
+          version: "0.9.10"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install project
+        run: uv sync --locked
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Build package
+        run: uv build

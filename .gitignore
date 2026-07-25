@@ -1,6 +1,6 @@
 **/__pycache__
 .vscode
-.github
+.github/copilot-instructions.md
 *.npy
 *notebooks/examples
 *notebooks/solvers
