@@ -177,7 +177,7 @@ In index notation we can re-write the above equation as
     % \quad \textup{for all} \quad k \in \{1, \ldots, d\} \quad \textup{and} \quad \beta \in \mathbb{R}^d
 ```
 
-for all $`k \in \{1, \ldots, d`\}$ and $`\beta \in \mathbb{Z}^d`$.
+for all $`k \in \{1, \ldots, d\}`$ and $`\beta \in \mathbb{Z}^d`$.
 Notice that once we truncate the $`\mathbb{Z}^d`$ sums over some finite set of indices $`\{-K, \ldots, K \}^d`$ for $`K \in \mathbb{N}`$ we obtain a system of ODEs.
 
 In short, we have converted our original PDE to a system of ODEs for the basis coefficients $`\{ \psi_\alpha \}_\alpha`$. The code in this repository is dedicated to solving this ODE system, for specific choices of $`\{Z_\alpha \}_\alpha`$ and end-point measures $`P_0, P_1`$.
